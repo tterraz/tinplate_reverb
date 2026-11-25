@@ -148,7 +148,8 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
 ## Pour reprendre
 - Dossier créé en session 68 (2026-11-25) à côté de `brimstone_vst3/`, dont il reprend la
   structure (DPF, `build.sh`, préférences, préréglages, A/B, thèmes, installateur, validateur
-  `tools/validate_vst3.sh`). Dépôt git : `master`, distant `origin` = `git@github.com:tterraz/tinplate.git`.
+  `tools/validate_vst3.sh`). Dépôt git : `master`, distant `origin` = `git@github.com:tterraz/tinplate_reverb.git` (dépôt GitHub
+  renommé de `tinplate` en `tinplate_reverb` le 2026-11-25 ; l'ancienne adresse redirige).
 - Captures : `CXXFLAGS="-DTINPLATE_UI_DEMO=<zone> -DTINPLATE_UI_DEMO_THEME=<0|1>
   [-DTINPLATE_UI_DEMO_PRESET=<n>] [-DTINPLATE_UI_DEMO_FREEZE=1]"`, version autonome
   (`make -C plugin jack BUILD_DIR_SUFFIX=-demo-<x> DPF_TARGET_DIR=../build-demo-<x>/bin` avec les
@@ -161,12 +162,12 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   `Tinplate-Reverb-1.0.0-linux-x86_64.tar.gz` (VST3, CLAP, LV2), chacun avec `COPYING` et le manuel, et le manuel
   seul `Tinplate-Reverb-manuel.pdf` ; notes en anglais (`build/release/notes.md` : téléchargements,
   installation, essais faits et non faits, licence) ; étiquette annotée `v1.0.0` (auteur Claude) poussée,
-  puis `/usr/bin/gh release create v1.0.0 --repo tterraz/tinplate --title ... --notes-file notes.md <fichiers>`
+  puis `/usr/bin/gh release create v1.0.0 --repo tterraz/tinplate_reverb --title ... --notes-file notes.md <fichiers>`
   (`gh` hors du PATH du bac à sable, déjà connecté au compte `tterraz`). **La version 1.0.0 est
   publiée** : tout changement livré ensuite demande un nouveau numéro (`getVersion`, installateur,
   documents ; choix de l'utilisateur).
-  Le nom reste provisoire : le changer demande aussi de renommer le dépôt GitHub et de refaire
-  une release.
+  Le nom du greffon reste provisoire : le changer demande aussi de renommer le dépôt GitHub et de
+  refaire une release.
 - Pistes non faites : réglages des préréglages à l'oreille ;
   coupe-haut de la réverbération, modulation réglable, taille de la plaque (les longueurs des
   retards sont celles de l'original).
