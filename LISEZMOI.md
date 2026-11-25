@@ -148,7 +148,7 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
 ## Pour reprendre
 - Dossier créé en session 68 (2026-11-25) à côté de `brimstone_vst3/`, dont il reprend la
   structure (DPF, `build.sh`, préférences, préréglages, A/B, thèmes, installateur, validateur
-  `tools/validate_vst3.sh`). Pas encore de dépôt git ni de commit (en attente d'accord).
+  `tools/validate_vst3.sh`). Dépôt git : `master`, distant `origin` = `git@github.com:tterraz/tinplate.git`.
 - Captures : `CXXFLAGS="-DTINPLATE_UI_DEMO=<zone> -DTINPLATE_UI_DEMO_THEME=<0|1>
   [-DTINPLATE_UI_DEMO_PRESET=<n>] [-DTINPLATE_UI_DEMO_FREEZE=1]"`, version autonome
   (`make -C plugin jack BUILD_DIR_SUFFIX=-demo-<x> DPF_TARGET_DIR=../build-demo-<x>/bin` avec les
