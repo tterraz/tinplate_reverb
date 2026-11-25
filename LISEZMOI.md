@@ -155,6 +155,18 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   variables MinGW de `build.sh`), lancée sous Wine (`WINEPREFIX` dédié), puis `import -window`
   sur la fenêtre « Tinplate: Tinplate Reverb » (`xwininfo -root -tree`). Zones : knobs 0-7
   (ordre de `kKnobs`), bulles 100 + indice de `kZones`.
+- **Release GitHub** (`v1.0.0` publiée le 2026-11-25, première publique) : `./build.sh` complet sur
+  `master` propre ; fichiers assemblés dans `build/release/` (non suivi) : installateur
+  `bin/Tinplate-Reverb-1.0.0-setup.exe`, `Tinplate-Reverb-1.0.0-windows.zip` (VST3, CLAP),
+  `Tinplate-Reverb-1.0.0-linux-x86_64.tar.gz` (VST3, CLAP, LV2), chacun avec `COPYING` et le manuel, et le manuel
+  seul `Tinplate-Reverb-manuel.pdf` ; notes en anglais (`build/release/notes.md` : téléchargements,
+  installation, essais faits et non faits, licence) ; étiquette annotée `v1.0.0` (auteur Claude) poussée,
+  puis `/usr/bin/gh release create v1.0.0 --repo tterraz/tinplate --title ... --notes-file notes.md <fichiers>`
+  (`gh` hors du PATH du bac à sable, déjà connecté au compte `tterraz`). **La version 1.0.0 est
+  publiée** : tout changement livré ensuite demande un nouveau numéro (`getVersion`, installateur,
+  documents ; choix de l'utilisateur).
+  Le nom reste provisoire : le changer demande aussi de renommer le dépôt GitHub et de refaire
+  une release.
 - Pistes non faites : réglages des préréglages à l'oreille ;
   coupe-haut de la réverbération, modulation réglable, taille de la plaque (les longueurs des
   retards sont celles de l'original).
