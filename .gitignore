@@ -1,0 +1,11 @@
+# compilations et binaires (refaits par build.sh)
+bin/
+build*/
+# clone de DPF portant le correctif de patches/ (refait par build.sh)
+dpf/
+# intermédiaires LaTeX et Python
+doc/*.aux
+doc/*.log
+doc/*.toc
+doc/*.out
+__pycache__/

@@ -1,0 +1,4 @@
+Sources de CAPS 0.9.26 (Tim Goetze, http://quitte.de/dsp/caps.html, GPL 3 ou ultérieure,
+voir COPYING), copiées sans modification depuis caps_0.9.26.tar.bz2 : seulement ce qu'il faut
+pour compiler PlateX2 (Reverb.cc). Servent de référence aux tests (tests/caps_reference.cpp) ;
+le greffon ne les utilise pas.

@@ -1,0 +1,42 @@
+diff --git a/distrho/src/DistrhoPluginVST3.cpp b/distrho/src/DistrhoPluginVST3.cpp
+index 7295c89..d9ee738 100644
+--- a/distrho/src/DistrhoPluginVST3.cpp
++++ b/distrho/src/DistrhoPluginVST3.cpp
+@@ -1457,6 +1457,37 @@ public:
+ 
+         if (data->nframes <= 0)
+         {
++            // a "flush" call (no audio) can still carry parameter changes: apply the last point
++            if (v3_param_changes** const inparamsptr = data->input_params)
++            {
++                int32_t offset;
++                double normalized;
++
++                for (int32_t i = 0, count = v3_cpp_obj(inparamsptr)->get_param_count(inparamsptr); i < count; ++i)
++                {
++                    v3_param_value_queue** const queue = v3_cpp_obj(inparamsptr)->get_param_data(inparamsptr, i);
++                    DISTRHO_SAFE_ASSERT_BREAK(queue != nullptr);
++
++                    const v3_param_id rindex = v3_cpp_obj(queue)->get_param_id(queue);
++                    DISTRHO_SAFE_ASSERT_UINT_BREAK(rindex < fVst3ParameterCount, rindex);
++
++                   #if DPF_VST3_HAS_INTERNAL_PARAMETERS
++                    if (rindex < kVst3InternalParameterCount)
++                        continue;
++                   #endif
++
++                    const int32_t pcount = v3_cpp_obj(queue)->get_point_count(queue);
++
++                    if (pcount <= 0)
++                        continue;
++
++                    if (v3_cpp_obj(queue)->get_point(queue, pcount - 1, &offset, &normalized) != V3_OK)
++                        break;
++
++                    _setNormalizedPluginParameterValue(rindex - kVst3InternalParameterCount, normalized);
++                }
++            }
++
+             updateParametersFromProcessing(data->output_params, 0);
+             return V3_OK;
+         }
