@@ -205,26 +205,24 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   variables MinGW de `build.sh`), lancée sous Wine (`WINEPREFIX` dédié), puis `import -window`
   sur la fenêtre « Tinplate: Tinplate Reverb » (`xwininfo -root -tree`). Zones : knobs 0-7
   (ordre de `kKnobs`), bulles 100 + indice de `kZones`.
-- **Release GitHub** (`v1.0.0` publiée le 2026-11-25, première publique) : `./build.sh` complet sur
-  `master` propre ; fichiers assemblés dans `build/release/` (non suivi) : installateur
-  `bin/Tinplate-Reverb-1.0.0-setup.exe`, `Tinplate-Reverb-1.0.0-windows.zip` (VST3, CLAP),
-  `Tinplate-Reverb-1.0.0-linux-x86_64.tar.gz` (VST3, CLAP, LV2), chacun avec `COPYING` et le manuel, et le manuel
-  seul `Tinplate-Reverb-manuel.pdf` ; notes en anglais (`build/release/notes.md` : téléchargements,
-  installation, essais faits et non faits, licence) ; étiquette annotée `v1.0.0` (auteur Claude) poussée,
-  puis `/usr/bin/gh release create v1.0.0 --repo tterraz/tinplate_reverb --title ... --notes-file notes.md <fichiers>`
-  (`gh` hors du PATH du bac à sable, déjà connecté au compte `tterraz`). **La version 1.0.0 est
-  publiée** : tout changement livré ensuite demande un nouveau numéro (`getVersion`, installateur,
-  documents ; choix de l'utilisateur).
+- **Release GitHub** (procédure ; `V` = numéro) : `./build.sh` complet sur `master` propre ;
+  fichiers assemblés dans `build/release/` (non suivi) : installateur
+  `bin/Tinplate-Reverb-V-setup.exe`, `Tinplate-Reverb-V-windows.zip` (VST3, CLAP),
+  `Tinplate-Reverb-V-linux-x86_64.tar.gz` (VST3, CLAP, LV2), chacun avec `COPYING` et le manuel, et le
+  manuel seul `Tinplate-Reverb-manuel.pdf` ; notes en anglais (`build/release/notes-V.md` :
+  nouveautés, téléchargements, installation, essais faits et non faits, licence) ; étiquette annotée
+  `vV` (auteur Claude) poussée, puis `/usr/bin/gh release create vV --repo tterraz/tinplate_reverb
+  --title ... --notes-file notes-V.md <fichiers>` (`gh` hors du PATH, connecté au compte `tterraz`).
+  **Une version publiée** : tout changement livré ensuite demande un nouveau numéro (`getVersion`,
+  installateur, documents ; choix de l'utilisateur).
   Le nom du greffon reste provisoire : le changer demande aussi de renommer le dépôt GitHub et de
   refaire une release.
-- **1.1.0 (2026-11-26, non publiée)** : ducking interne (Duck, Threshold, Attack, Release,
+- **1.1.0 (2026-11-26, release GitHub `v1.1.0` publiée, notes `build/release/notes-1.1.0.md`)** : ducking interne (Duck, Threshold, Attack, Release,
   vu-mètre CUT, préréglage Ducked vocal), Tail jusqu'à 1,16 (10 s à 500 Hz) et Clear (vidage à
   chaque attaque, deux plaques) ; fenêtre 900 × 730 ; manuel 15 pages (figure `fig_duck.pdf`). Version 1.1.0 dans `getVersion`,
   l'installateur, `README.md`, le manuel. Reste : écoute du ducking et des longues queues,
-  vrai hôte, release GitHub `v1.1.0` (sur demande). **À faire (demande de l'utilisateur)** :
-  supprimer l'étiquette et la release `v1.0.0` sur GitHub (aucun utilisateur de 1.0.0) ; à faire
-  avec son accord au moment voulu (`/usr/bin/gh release delete v1.0.0 --repo
-  tterraz/tinplate_reverb --cleanup-tag`).
+  vrai hôte. Release et étiquette `v1.0.0` supprimées de GitHub le 2026-11-26
+  (demande de l'utilisateur, aucun utilisateur de 1.0.0) : `v1.1.0` est la seule release.
 - Pistes non faites : réglages des préréglages à l'oreille ;
   coupe-haut de la réverbération, modulation réglable, taille de la plaque (les longueurs des
   retards sont celles de l'original).
