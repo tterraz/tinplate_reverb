@@ -115,7 +115,7 @@ bulle d'aide au survol ; pour un bouton, son titre donne la valeur détaillée.
 
 \begin{center}
 \includegraphics[width=0.8\textwidth]{capture_interface_tin.png}\\[2pt]
-\small Thème clair \ctl{TIN}, Clear allumé et armé.
+\small Thème clair \ctl{TIN}, Clear allumé, bulle d'aide de Clear.
 \end{center}
 
 \subsection{En-tête}
@@ -141,7 +141,8 @@ quand il reste au-dessus de $-3$\dB{} jusqu'à la fréquence de Nyquist).
 
 \subsection{Section 2 : PLATE}
 \ctl{TAIL} et \ctl{DAMPING}, les deux grands boutons de la boucle ; sous Damping, la fréquence à
-$-3$\dB{} de son filtre. Au centre, le temps de réverbération (RT60) à 500\,Hz, en grand, et à
+$-3$\dB{} de son filtre. Le petit bouton \ctl{SIZE}, à droite de \ctl{FREEZE}, règle la taille
+de la plaque. Au centre, le temps de réverbération (RT60) à 500\,Hz, en grand, et à
 125\,Hz et 4\,kHz. Le bouton \ctl{FREEZE} gèle la réverbération ; Tail et Damping sont alors
 grisés, puisqu'ils n'agissent plus.
 
@@ -172,7 +173,7 @@ chaque vidage).
 En bas, sur une échelle de fréquences de 20\,Hz à 20\,kHz (ou à la fréquence de Nyquist) :
 \begin{itemize}
 \item en laiton, le \textbf{temps de réverbération} en fonction de la fréquence (échelle de
-  gauche, en secondes ; pleine échelle de 2, 4, 6, 8, 10 ou 12\,s selon la courbe), réglé par Tail et
+  gauche, en secondes ; pleine échelle de 2 à 32\,s selon la courbe), réglé par Tail et
   Damping ; pendant le gel, la mention \og FROZEN: infinite decay\fg ;
 \item en acier et en tirets, la \textbf{tonalité} de la réverbération (échelle de droite, en
   dB), réglée par Bandwidth et Low cut.
@@ -200,6 +201,7 @@ Pre-delay & 0--250\,ms & 0\,ms & retard avant la plaque \\
 Bandwidth & 0--1 & 0,5 & passe-bas d'entrée de la plaque (original) \\
 Tail & 0--1,16 & 0,5 & longueur de la réverbération (original jusqu'à 1) \\
 Damping & 0--1 & 0,75 & passe-bas dans la boucle (original) \\
+Size & 50--200\,\% & 100\,\% & taille de la plaque (100\,\% : l'original) \\
 Freeze & oui/non & non & réverbération tenue sans fin \\
 Dry & off--+6\dB & 0\dB & niveau du son direct \\
 Link & oui/non & non & Dry et Reverb liés comme le Blend de l'original \\
@@ -240,6 +242,15 @@ résonne environ 0,6\,s : ses filtres passe-tout sonnent d'eux-mêmes. L'origina
 $0{,}749 \times$ Tail, au plus 0,869) : 10\,s à 500\,Hz avec Damping au minimum, 6,7\,s avec
 Damping 0,75. Le grave tient plus longtemps que l'aigu (11,5\,s à 125\,Hz pour Tail 1,16 et
 Damping 0,4).
+
+\paragraph{Size.} Taille de la plaque : longueurs des retards de la boucle et positions des
+prises de sortie, de 50 à 200\,\% de celles de l'original (100\,\%, le son de l'original au bit
+près). Petite : son plus métallique, échos plus serrés ; grande : plaque plus ample, résonances
+plus graves et plus denses. La durée suit la taille, comme pour une vraie plaque : à Tail égal,
+une plaque deux fois plus grande sonne environ deux fois plus longtemps (2,1\,s à 100\,\%,
+4,3\,s à 200\,\%, à 500\,Hz pour Tail 0,6 et Damping 0,4 ; jusqu'à 18\,s à Tail maximal).
+Un changement de taille glisse en 100\,ms : la hauteur de la réverbération en cours varie
+brièvement, sans clic. Size agit aussi pendant le gel (glissement de hauteur du son gelé).
 
 \paragraph{Damping.} Passe-bas du premier ordre dans la boucle : à chaque tour, les aigus perdent
 un peu plus que les graves, si bien qu'ils s'éteignent plus tôt (son plus sombre, plus
@@ -330,7 +341,8 @@ Ducked vocal      & 0,85 & 0,65 & 0,45 & $-14{,}0$ & $-1{,}9$ & 25 & 150 & 110 &
 Reverb et Dry en dB (le mélange de l'original à Blend 0,30, 0,25, 0,22\ldots), Pre-delay en ms, Low cut en Hz, Width en
 \%, Duck en dB, RT60 à 500\,Hz en secondes (à
 44,1\,kHz) ; Output à 0\dB{} partout, Freeze inactif ; Threshold $-30$\dBFS{} et Attack
-10\,ms partout, Release 300\,ms (400\,ms pour Ducked vocal) ; Clear éteint partout. \og Original (CAPS)\fg{} reproduit l'original au bit près. Ces
+10\,ms partout, Release 300\,ms (400\,ms pour Ducked vocal) ; Size 100\,\%, Clear et Link
+éteints partout. \og Original (CAPS)\fg{} reproduit l'original au bit près. Ces
 préréglages ont été réglés d'après les lois des réglages, pas à l'oreille. Ils sont aussi
 présentés à l'hôte (liste des programmes).
 
@@ -461,6 +473,18 @@ fixes de la boucle (son métallique, selon Dattorro) et donne à la queue son mo
 des deux moitiés, de signes alternés, multipliée par 0,6. Les prises des deux canaux étant
 différentes, la réverbération est stéréo même pour une entrée mono (figure~\ref{fig:reponse}).
 
+\paragraph{Taille (Size).} Les longueurs des quatre retards, des deux passe-tout et des deux
+passe-tout modulés de la boucle, et les positions des douze prises de sortie, sont celles de
+l'original multipliées par Size et arrondies à l'échantillon ; les quatre diffuseurs d'entrée ne
+changent pas (l'attaque garde sa texture). La mémoire est réservée pour 200\,\%. Un retard lit
+l'échantillon écrit $n$ pas plus tôt, comme le pointeur de lecture de l'original : à 100\,\%,
+les valeurs lues sont exactement celles de l'original. Le gain de boucle n'est pas compensé :
+un tour plus long perd autant par tour, donc la durée croît à peu près comme la taille. Quand
+Size change, chaque longueur va linéairement à sa nouvelle valeur entière en 100\,ms ; pendant
+ce glissement seulement, les lectures sont interpolées linéairement (d'où le bref glissement
+de hauteur). Avec Clear, la plaque vide qui prend le relais passe tout de suite à la taille
+courante.
+
 \paragraph{Lois des réglages.} Ce sont celles de l'original (figure~\ref{fig:lois}), avec $p$ la
 valeur du bouton (Tail jusqu'à 1,16) :
 \[
@@ -507,19 +531,21 @@ voisins de 0,72, résonnent d'eux-mêmes (0,5 à 0,65\,s même à Tail 0) et leu
 varie avec la fréquence.
 
 L'interface affiche donc des valeurs \textbf{mesurées} : une table de la réponse impulsionnelle
-de la plaque à 44,1\,kHz, pour 25 valeurs de Tail (0 à 1,2 par pas de 0,05), 9 de Damping et 9 bandes d'octave de 62,5\,Hz
+de la plaque à 44,1\,kHz, pour 4 tailles (50, 100, 150 et 200\,\%), 25 valeurs de Tail (0 à
+1,2 par pas de 0,05), 9 de Damping et 9 bandes d'octave de 62,5\,Hz
 à 16\,kHz. Pour chaque point, la réponse (somme des deux canaux) passe par un passe-bande
 (Q = 2) ; on intègre son énergie depuis la fin (intégrale de Schroeder) et on prolonge à 60\dB{}
 la pente entre $-5$ et $-25$\dB. Entre les points, la table est interpolée linéairement ; une
 mesure refaite entre les points de la grille s'écarte de la valeur affichée de moins de 10\,\%
-(au plus 7,6\,\% sur les 10 cas vérifiés, dont trois avec Tail au-delà de 1 : 9,87\,s
-mesurés pour 9,94\,s affichés à Tail 1,16).
+(au plus 7,6\,\% sur les 15 cas vérifiés, dont trois avec Tail au-delà de 1 : 9,87\,s
+mesurés pour 9,94\,s affichés à Tail 1,16, et cinq à d'autres tailles, entre les tailles
+mesurées : 75, 130, 175\,\%\ldots).
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{fig_rt60.pdf}
 \caption{Temps de réverbération selon la fréquence (table mesurée, à 44,1\,kHz) : à gauche selon
-Tail, à droite selon Damping.}
+Tail, au milieu selon Damping, à droite selon Size.}
 \label{fig:rt60}
 \end{figure}
 
@@ -635,8 +661,8 @@ continue de tourner pendant le Bypass.
 Le code de la plaque est une transcription de celui de CAPS 0.9.26 (classes \texttt{PlateStub},
 \texttt{Delay}, \texttt{LP1}, \texttt{Sine}) qui garde le type de chaque opération (échantillons
 en simple précision, certains produits et sommes en double). Avec Pre-delay 0, Low cut off,
-Width 100\,\%, Output 0\dB, Duck 0, Clear et Freeze inactifs, pour n'importe quelles valeurs
-de Bandwidth, Damping et Tail (jusqu'à 1), la sortie est \textbf{celle de l'original au bit
+Width 100\,\%, Output 0\dB, Size 100\,\%, Duck 0, Clear et Freeze inactifs, pour n'importe
+quelles valeurs de Bandwidth, Damping et Tail (jusqu'à 1), la sortie est \textbf{celle de l'original au bit
 près} en réverbération seule (Reverb 0\dB, Dry off : Blend 1 de l'original) et en son direct
 seul (Dry 0\dB, Reverb off : Blend 0), réglages fixes. Pour un mélange, les gains des faders,
 calculés depuis des dB, ne retombent pas exactement sur $\mathrm{blend}^{1{,}53}$ : l'écart est
@@ -697,7 +723,7 @@ en sortie.
   \item Linux : \verb|$XDG_CONFIG_HOME/tinplate/|, à défaut \verb|~/.config/tinplate/|.
   \end{itemize}
 \item[Format d'un préréglage.] Texte, une ligne \texttt{clé=valeur} par réglage
-  (\texttt{bandwidth}, \texttt{tail}, \texttt{damping}, \texttt{wet}, \texttt{dry}, \texttt{link}, \texttt{predelay},
+  (\texttt{bandwidth}, \texttt{tail}, \texttt{damping}, \texttt{size}, \texttt{wet}, \texttt{dry}, \texttt{link}, \texttt{predelay},
   \texttt{lowcut}, \texttt{width}, \texttt{output}, \texttt{duck}, \texttt{threshold},
   \texttt{attack}, \texttt{release}, \texttt{clear}, \texttt{floor}, \texttt{trigger},
   \texttt{fade}, \texttt{window}), nombres avec un point décimal quelle que
@@ -709,7 +735,6 @@ en sortie.
 % ==============================================================================================
 \section{Limites connues}\label{sec:limites}
 \begin{itemize}
-\item La taille de la plaque (longueurs des retards) est celle de l'original et ne se règle pas.
 \item Bandwidth et Damping coupent plus haut aux fréquences d'échantillonnage élevées
   (comportement de l'original) ; le temps de réverbération change aussi un peu selon la
   fréquence.

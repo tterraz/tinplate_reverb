@@ -13,7 +13,11 @@
  * the original code, tests/caps/).  Changes: no LADSPA, std::vector buffers, the x87-only
  * truncation mode dropped (the original also truncates with (int) on SSE2), and the coefficients
  * set by the caller (for smoothing; with steady controls they are those of PlateX2::cycle()),
- * and a depth of modulation (1: the original; Freeze takes it to 0).
+ * a depth of modulation (1: the original; Freeze takes it to 0), and a size: the lengths of the
+ * delays of the tank and the output taps times 0.5 to 2, rounded (1: the original).  A delay
+ * reads the sample written n steps before (the read pointer of the original, computed from the
+ * write one, same values).  A change of size glides each length linearly to its new integer
+ * value, with linear interpolation of the reads while it glides (a brief pitch glide).
  *
  * Signal flow (mono input, stereo output):
  *   x -> bandwidth low-pass -> 4 input allpasses (diffusion)
@@ -47,20 +51,36 @@ class Delay
 public:
     unsigned size = 0;
     std::vector<float> data;
-    unsigned read = 0, write = 0;
+    unsigned write = 0;
+    unsigned n = 0;          // length: get() gives the sample put n steps before
+    float len = 0.0f;        // fractional length while gliding (glide), else n
+    bool glide = false;
 
-    void init(const unsigned n)
+    // length n, room for lengths up to capacity
+    void init(const unsigned length, const unsigned capacity)
     {
-        size = nextPowerOf2(n);
+        size = nextPowerOf2(std::max(length, capacity) + 1);
         data.assign(size, 0.0f);
         --size;
-        write = n;
-        read = 0;
+        write = 0;
+        n = length;
+        len = static_cast<float>(length);
+        glide = false;
     }
+
+    void init(const unsigned length) { init(length, length); }
 
     void reset() { std::fill(data.begin(), data.end(), 0.0f); }
 
     float& operator[](const int i) { return data[(write - i) & size]; }
+
+    // fractional tap, linear interpolation
+    float tap(const float p)
+    {
+        const int i = static_cast<int>(p);
+        const float f = p - i;
+        return f == 0.0f ? (*this)[i] : (1 - f) * (*this)[i] + f * (*this)[i + 1];
+    }
 
     void put(const float x)
     {
@@ -68,17 +88,21 @@ public:
         write = (write + 1) & size;
     }
 
+    // the sample put n steps before (before this step's put)
     float get()
     {
-        const float x = data[read];
-        read = (read + 1) & size;
-        return x;
+        if (!glide)
+            return data[(write - n) & size];
+        const int i = static_cast<int>(len);
+        const float f = len - i;
+        return (1 - f) * data[(write - i) & size] + f * data[(write - i - 1) & size];
     }
 
     float putget(const float x)
     {
+        const float y = get();   // read before the put: the slot of the original read pointer
         put(x);
-        return get();
+        return y;
     }
 
     // fractional lookup, linear interpolation
@@ -138,11 +162,11 @@ public:
     Delay delay;
     Sine lfo;
 
-    void init(const int n, const int w)
+    void init(const int n, const int w, const int capacity)
     {
         n0 = static_cast<float>(n);
         width = static_cast<float>(w);
-        delay.init(n + w);
+        delay.init(n + w, capacity + w + 2);
     }
 
     void reset() { delay.reset(); }
@@ -190,7 +214,9 @@ public:
         int taps[12];
     } tank;
 
-    // lengths of the delay lines for sample rate fs (allocates)
+    static constexpr float kMinSize = 0.5f, kMaxSize = 2.0f;
+
+    // lengths of the delay lines for sample rate fs, size 1 (allocates room for kMaxSize)
     void init(const float fs)
     {
         fFs = fs;
@@ -202,6 +228,7 @@ public:
             0.14169550754342933f, 0.089244313027116023f, 0.10628003091293972f
         };
         const auto L = [&](const int i) { return static_cast<int>(l[i] * fs); };
+        const auto room = [&](const int i) { return static_cast<unsigned>(std::ceil(kMaxSize * L(i))) + 2; };
 
         input.lattice[0].init(L(0));   // lh
         input.lattice[1].init(L(1));
@@ -209,17 +236,17 @@ public:
         input.lattice[3].init(L(3));
 
         // modulated, width about 12 samples @ 44.1
-        tank.mlattice[0].init(L(4), static_cast<int>(0.000403221 * fs));
-        tank.mlattice[1].init(L(5), static_cast<int>(0.000403221 * fs));
+        tank.mlattice[0].init(L(4), static_cast<int>(0.000403221 * fs), room(4));
+        tank.mlattice[1].init(L(5), static_cast<int>(0.000403221 * fs), room(5));
         fModWidth = tank.mlattice[0].width;
 
-        tank.delay[0].init(L(6));      // lh
-        tank.lattice[0].init(L(7));
-        tank.delay[1].init(L(8));
+        tank.delay[0].init(L(6), room(6));      // lh
+        tank.lattice[0].init(L(7), room(7));
+        tank.delay[1].init(L(8), room(8));
 
-        tank.delay[2].init(L(9));      // rh
-        tank.lattice[1].init(L(10));
-        tank.delay[3].init(L(11));
+        tank.delay[2].init(L(9), room(9));      // rh
+        tank.lattice[1].init(L(10), room(10));
+        tank.delay[3].init(L(11), room(11));
 
         static const float t[] = {
             0.0089378717113000241f, 0.099929437854910791f, 0.064278754074123853f,
@@ -229,7 +256,53 @@ public:
         };
         for (int i = 0; i < 12; ++i)
             tank.taps[i] = static_cast<int>(t[i] * fs);
+
+        // lengths that follow the size: 4 delays, 2 allpasses, 2 modulated allpasses, 12 taps
+        for (int i = 0; i < 4; ++i)
+            fBase[i] = static_cast<float>(tank.delay[i].n);
+        for (int i = 0; i < 2; ++i)
+        {
+            fBase[4 + i] = static_cast<float>(tank.lattice[i].n);
+            fBase[6 + i] = tank.mlattice[i].n0;
+        }
+        for (int i = 0; i < 12; ++i)
+            fBase[8 + i] = static_cast<float>(tank.taps[i]);
+        for (int i = 0; i < kLengths; ++i)
+            fLen[i] = fTarget[i] = fBase[i];
+        fSize = 1.0f;
+        fGlideLeft = 0;
+        apply();
     }
+
+    // size of the tank (kMinSize .. kMaxSize, 1 = the original); new lengths reached in steps samples
+    void setSize(float s, const int steps)
+    {
+        s = std::fmin(std::fmax(s, kMinSize), kMaxSize);
+        if (s == fSize)
+            return;
+        fSize = s;
+        for (int i = 0; i < kLengths; ++i)
+        {
+            fTarget[i] = std::round(fBase[i] * s);
+            fStep[i] = steps > 0 ? (fTarget[i] - fLen[i]) / steps : 0.0f;
+        }
+        fGlideLeft = steps;
+        if (steps <= 0)
+            finishGlide();
+        else
+            apply();
+    }
+
+    // lengths at their targets at once (an empty plate: nothing to glide)
+    void finishGlide()
+    {
+        for (int i = 0; i < kLengths; ++i)
+            fLen[i] = fTarget[i];
+        fGlideLeft = 0;
+        apply();
+    }
+
+    bool gliding() const { return fGlideLeft > 0; }
 
     // state cleared, modulation restarted (PlateStub::activate)
     void activate()
@@ -267,6 +340,17 @@ public:
     // one mono sample in, one stereo sample out (PlateStub::process)
     void process(float x, const float decay, float* const outL, float* const outR)
     {
+        if (fGlideLeft > 0)
+        {
+            if (--fGlideLeft == 0)
+                for (int i = 0; i < kLengths; ++i)
+                    fLen[i] = fTarget[i];
+            else
+                for (int i = 0; i < kLengths; ++i)
+                    fLen[i] += fStep[i];
+            apply();
+        }
+
         x = input.bandwidth.process(x);
 
         x = input.lattice[0].process(x, indiff1);   // lh
@@ -295,27 +379,74 @@ public:
         tank.delay[3].put(xr);
 
         // gather output
-        xl  = .6 * tank.delay[2][tank.taps[0]];
-        xl += .6 * tank.delay[2][tank.taps[1]];
-        xl -= .6 * tank.lattice[1][tank.taps[2]];
-        xl += .6 * tank.delay[3][tank.taps[3]];
-        xl -= .6 * tank.delay[0][tank.taps[4]];
-        xl += .6 * tank.lattice[0][tank.taps[5]];
+        if (!fGlide)
+        {
+            xl  = .6 * tank.delay[2][tank.taps[0]];
+            xl += .6 * tank.delay[2][tank.taps[1]];
+            xl -= .6 * tank.lattice[1][tank.taps[2]];
+            xl += .6 * tank.delay[3][tank.taps[3]];
+            xl -= .6 * tank.delay[0][tank.taps[4]];
+            xl += .6 * tank.lattice[0][tank.taps[5]];
 
-        xr  = .6 * tank.delay[0][tank.taps[6]];
-        xr += .6 * tank.delay[0][tank.taps[7]];
-        xr -= .6 * tank.lattice[0][tank.taps[8]];
-        xr += .6 * tank.delay[1][tank.taps[9]];
-        xr -= .6 * tank.delay[2][tank.taps[10]];
-        xr += .6 * tank.lattice[1][tank.taps[11]];
+            xr  = .6 * tank.delay[0][tank.taps[6]];
+            xr += .6 * tank.delay[0][tank.taps[7]];
+            xr -= .6 * tank.lattice[0][tank.taps[8]];
+            xr += .6 * tank.delay[1][tank.taps[9]];
+            xr -= .6 * tank.delay[2][tank.taps[10]];
+            xr += .6 * tank.lattice[1][tank.taps[11]];
+        }
+        else
+        {
+            const float* const t = fLen + 8;   // fractional taps while the size glides
+            xl  = .6 * tank.delay[2].tap(t[0]);
+            xl += .6 * tank.delay[2].tap(t[1]);
+            xl -= .6 * tank.lattice[1].tap(t[2]);
+            xl += .6 * tank.delay[3].tap(t[3]);
+            xl -= .6 * tank.delay[0].tap(t[4]);
+            xl += .6 * tank.lattice[0].tap(t[5]);
+
+            xr  = .6 * tank.delay[0].tap(t[6]);
+            xr += .6 * tank.delay[0].tap(t[7]);
+            xr -= .6 * tank.lattice[0].tap(t[8]);
+            xr += .6 * tank.delay[1].tap(t[9]);
+            xr -= .6 * tank.delay[2].tap(t[10]);
+            xr += .6 * tank.lattice[1].tap(t[11]);
+        }
 
         *outL = static_cast<float>(xl);
         *outR = static_cast<float>(xr);
     }
 
 private:
+    // lengths of the current step into the delays; interpolated reads while they glide
+    void apply()
+    {
+        fGlide = fGlideLeft > 0;
+        for (int i = 0; i < 4; ++i)
+            setLength(tank.delay[i], fLen[i]);
+        for (int i = 0; i < 2; ++i)
+        {
+            setLength(tank.lattice[i], fLen[4 + i]);
+            tank.mlattice[i].n0 = fLen[6 + i];
+        }
+        for (int i = 0; i < 12; ++i)
+            tank.taps[i] = static_cast<int>(fLen[8 + i]);
+    }
+
+    void setLength(Delay& d, const float len)
+    {
+        d.len = len;
+        d.n = static_cast<unsigned>(len);
+        d.glide = fGlide;
+    }
+
+    static const int kLengths = 20;
     float fFs = 44100.0f;
     float fModWidth = 0.0f;
+    float fSize = 1.0f;
+    float fBase[kLengths] = {}, fLen[kLengths] = {}, fTarget[kLengths] = {}, fStep[kLengths] = {};
+    int fGlideLeft = 0;
+    bool fGlide = false;
 };
 
 }   // namespace PlateCore

@@ -54,6 +54,10 @@
  * under Floor again.  No clearing while frozen (the frozen sound is kept).  Clear off: only
  * the first plate runs, the output is to the bit that without Clear.
  *
+ * Size (1.1.0 after the release): lengths of the delays of the tank and of the output taps
+ * times 0.5 to 2 (PlateCore), glided in 100 ms; the decay gain is not compensated (a larger
+ * plate rings longer at the same Tail).  100 %: the original, to the bit.
+ *
  * Pre-delay: integer delay in samples; a change crossfades from the old to the new delay in
  * 30 ms (no pitch glide), the next change waits for the end of the crossfade.
  */
@@ -243,6 +247,7 @@ protected:
         case kParamBandwidth: set(p, "Bandwidth", "bandwidth", ""); break;
         case kParamTail:      set(p, "Tail", "tail", ""); break;
         case kParamDamping:   set(p, "Damping", "damping", ""); break;
+        case kParamSize:      set(p, "Size", "size", "%"); break;
         case kParamWet:       set(p, "Reverb level", "wet", "dB"); break;
         case kParamDry:       set(p, "Dry level", "dry", "dB"); break;
         case kParamLink:
@@ -546,6 +551,9 @@ private:
         fGain.set(fParams[kParamOutput] == 0.0f ? 1.0f : dbToGain(fParams[kParamOutput]), n);
         fBypass.set(fParams[kParamBypass] > 0.5f ? 1.0f : 0.0f, ramp ? static_cast<int>(0.01 * sr) : 0);
         fLowCut.set(fParams[kParamLowCut], sr, n);
+        // size: the lengths glide in 100 ms (pitch glide), taken at once when not ramping
+        for (PlateCore::Plate& p : fPlate)
+            p.setSize(fParams[kParamSize] * 0.01f, ramp ? static_cast<int>(0.1 * sr) : 0);
         // ducking: no ramp, the cut is smoothed by the attack and release themselves
         fDuckDepth = fParams[kParamDuck];
         fDuckThresholdDb = fParams[kParamThreshold];
@@ -621,6 +629,7 @@ private:
             if (fParams[kParamFreeze] > 0.5f || fInGain.cur != 1.0f)
                 return;           // frozen (or freezing): the frozen sound is kept
             fCur = 1 - fCur;
+            fPlate[fCur].finishGlide();   // empty: its lengths go to the size at once
             fFadeLength = fFadeLeft = std::max(1, static_cast<int>(1e-3 * fParams[kParamFade] * getSampleRate()));
             fFlash = fFlashLength;
         }

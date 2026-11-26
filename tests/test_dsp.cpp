@@ -29,6 +29,8 @@
  * 12. Clear: after an attack and the fade, the output is that of a fresh plugin fed from the
  *     attack (the old tail is gone); no re-arming during the fade; a slow rise, or an attack
  *     while frozen, does not clear (output identical to Clear off).
+ * 14. Size: a change glides without a click (largest step of the output close to that of a
+ *     steady size); 200 %: finite output, longer decay than 100 %.
  * 13. Link: dry and wet linked by the DSP; when linking, the dry level leads; automation of the
  *     wet level alone then moves the dry one (output identical to both levels set by hand).
  */
@@ -374,26 +376,32 @@ int main()
     // 7. decay time ------------------------------------------------------------------------------
     std::printf("7. decay time shown == measured, between the points of the table\n");
     {
-        struct { double sr; float tail, damping; double hz; } cases[] = {
-            { 44100.0, 0.35f, 0.30f, 700.0 }, { 44100.0, 0.55f, 0.60f, 3000.0 },
-            { 44100.0, 0.85f, 0.10f, 300.0 }, { 44100.0, 0.15f, 0.90f, 1500.0 },
-            { 44100.0, 0.95f, 0.45f, 6000.0 }, { 96000.0, 0.55f, 0.60f, 3000.0 },
-            { 96000.0, 0.75f, 0.20f, 180.0 },
+        struct { double sr; float tail, damping, size; double hz; } cases[] = {
+            { 44100.0, 0.35f, 0.30f, 1.0f, 700.0 }, { 44100.0, 0.55f, 0.60f, 1.0f, 3000.0 },
+            { 44100.0, 0.85f, 0.10f, 1.0f, 300.0 }, { 44100.0, 0.15f, 0.90f, 1.0f, 1500.0 },
+            { 44100.0, 0.95f, 0.45f, 1.0f, 6000.0 }, { 96000.0, 0.55f, 0.60f, 1.0f, 3000.0 },
+            { 96000.0, 0.75f, 0.20f, 1.0f, 180.0 },
             // beyond the range of the original (tail up to 1.16): 10 s at 500 Hz
-            { 44100.0, 1.16f, 0.00f, 500.0 }, { 44100.0, 1.12f, 0.35f, 900.0 },
-            { 96000.0, 1.07f, 0.55f, 2500.0 },
+            { 44100.0, 1.16f, 0.00f, 1.0f, 500.0 }, { 44100.0, 1.12f, 0.35f, 1.0f, 900.0 },
+            { 96000.0, 1.07f, 0.55f, 1.0f, 2500.0 },
+            // other sizes, between the measured ones (0.5, 1, 1.5, 2)
+            { 44100.0, 0.55f, 0.40f, 0.5f, 500.0 }, { 44100.0, 0.65f, 0.30f, 0.75f, 1200.0 },
+            { 44100.0, 0.80f, 0.50f, 1.3f, 400.0 }, { 44100.0, 0.95f, 0.20f, 1.75f, 2000.0 },
+            { 96000.0, 0.60f, 0.45f, 2.0f, 800.0 },
         };
         for (const auto& c : cases)
         {
             std::vector<float> longImp(static_cast<size_t>(24.0 * c.sr), 0.0f);
             longImp[0] = 1.0f;
             Settings s = originalSettings(1.0f, c.tail, c.damping, 1.0f);
+            s.values[kParamSize] = c.size * 100.0f;
             process(s, c.sr, longImp, longImp, oL, oR);
             const double measured = measureRt60(oL, oR, c.hz, c.sr);
-            const double shown = TinplateRt60::seconds(c.tail, c.damping, c.hz, c.sr);
+            const double shown = TinplateRt60::seconds(c.tail, c.damping, c.size, c.hz, c.sr);
             char buf[160];
-            std::snprintf(buf, sizeof(buf), "%.0f kHz, tail %.2f damping %.2f, %5.0f Hz: measured %.2f s, shown %.2f s",
-                          c.sr / 1000.0, c.tail, c.damping, c.hz, measured, shown);
+            std::snprintf(buf, sizeof(buf),
+                          "%.0f kHz, tail %.2f damping %.2f size %3.0f %%, %5.0f Hz: measured %.2f s, shown %.2f s",
+                          c.sr / 1000.0, c.tail, c.damping, c.size * 100.0f, c.hz, measured, shown);
             check(measured > 0.0 && std::fabs(shown / measured - 1.0) < 0.10, buf);
         }
     }
@@ -669,6 +677,43 @@ int main()
         std::snprintf(buf, sizeof(buf), "dry -6 dB leads (reverb %.2f dB), then reverb -3 dB automated (dry %.2f dB)",
                       TinplateLaw::linkedDb(-6.0f), TinplateLaw::linkedDb(-3.0f));
         check(same, buf);
+    }
+
+    // 14. size -----------------------------------------------------------------------------------
+    std::printf("14. size\n");
+    {
+        std::vector<float> tone(static_cast<size_t>(2.0 * sr));
+        for (size_t i = 0; i < tone.size(); ++i)
+            tone[i] = 0.3f * static_cast<float>(std::sin(2.0 * M_PI * 220.0 * i / sr));
+        const size_t at = static_cast<size_t>(1.0 * sr);
+        const auto maxStep = [&](const std::vector<float>& y, const size_t a, const size_t b) {
+            float m = 0.0f;
+            for (size_t i = a; i < b; ++i)
+                m = std::max(m, std::fabs(y[i] - y[i - 1]));
+            return m;
+        };
+        Settings s = originalSettings(0.8f, 0.6f, 0.4f, 1.0f);
+        process(s, sr, tone, tone, rL, rR);
+        process(s, sr, tone, tone, oL, oR, { { at, kParamSize, 200.0f } });
+        const float steady = maxStep(rL, at, at + static_cast<size_t>(0.3 * sr));
+        const float moved = maxStep(oL, at, at + static_cast<size_t>(0.3 * sr));
+        bool finite = true;
+        for (size_t i = 0; i < oL.size(); ++i)
+            finite = finite && std::isfinite(oL[i]) && std::isfinite(oR[i]);
+        char buf[160];
+        std::snprintf(buf, sizeof(buf), "size 100 -> 200 %% while playing: largest step %.4f (steady %.4f)", moved, steady);
+        check(finite && moved < 1.5f * steady, buf);
+
+        std::vector<float> imp(static_cast<size_t>(16.0 * sr), 0.0f);
+        imp[0] = 1.0f;
+        s = originalSettings(1.0f, 0.6f, 0.4f, 1.0f);
+        process(s, sr, imp, imp, rL, rR);
+        const double t100 = measureRt60(rL, rR, 500.0, sr);
+        s.values[kParamSize] = 200.0f;
+        process(s, sr, imp, imp, oL, oR);
+        const double t200 = measureRt60(oL, oR, 500.0, sr);
+        std::snprintf(buf, sizeof(buf), "RT60 at 500 Hz: %.2f s at 100 %%, %.2f s at 200 %%", t100, t200);
+        check(t200 > 1.6 * t100, buf);
     }
 
     std::printf("%s\n", gFailures == 0 ? "all DSP tests passed" : "DSP TESTS FAILED");

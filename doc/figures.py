@@ -81,30 +81,35 @@ def rt60_table():
     text = open(os.path.join(ROOT, "plugin", "Rt60Table.hpp")).read()
     body = text[text.index("kSeconds"):]
     values = [float(v) for v in re.findall(r"(\d+\.\d+)f", body)]
+    sizes = int(re.search(r"kSizes = (\d+)", text).group(1))
     tails = int(re.search(r"kTails = (\d+)", text).group(1))
     step = float(re.search(r"kTailStep = ([0-9.]+)", text).group(1))
-    return np.array(values).reshape(tails, 9, 9), step
+    first = float(re.search(r"kFirstSize = ([0-9.]+)", text).group(1))
+    size_step = float(re.search(r"kSizeStep = ([0-9.]+)", text).group(1))
+    return np.array(values).reshape(sizes, tails, 9, 9), step, first, size_step
 
 
-TABLE, TAIL_STEP = rt60_table()
+TABLE, TAIL_STEP, FIRST_SIZE, SIZE_STEP = rt60_table()
 
 
-def rt60(tail, damping, f, fs=44100.0):
-    """plugin/Rt60.hpp: trilinear interpolation in Tail, Damping, octaves from 62.5 Hz."""
+def rt60(tail, damping, f, fs=44100.0, size=1.0):
+    """plugin/Rt60.hpp: linear interpolation in Size, Tail, Damping, octaves from 62.5 Hz."""
     def split(x, last):
         x = np.clip(x, 0.0, last)
         i = np.minimum(np.floor(x).astype(int), last - 1)
         return i, x - i
     f = np.asarray(f, dtype=float)
-    it, wt = split(np.full_like(f, tail / TAIL_STEP), TABLE.shape[0] - 1)
+    iz, wz = split(np.full_like(f, (size - FIRST_SIZE) / SIZE_STEP), TABLE.shape[0] - 1)
+    it, wt = split(np.full_like(f, tail / TAIL_STEP), TABLE.shape[1] - 1)
     idd, wd = split(np.full_like(f, damping * 8), 8)
     jf, wf = split(np.log2(f * 44100.0 / fs / 62.5), 8)
     v = np.zeros_like(f)
-    for a in (0, 1):
-        for b in (0, 1):
-            for c in (0, 1):
-                v += ((wt if a else 1 - wt) * (wd if b else 1 - wd) * (wf if c else 1 - wf)
-                      * TABLE[it + a, idd + b, jf + c])
+    for e in (0, 1):
+        for a in (0, 1):
+            for b in (0, 1):
+                for c in (0, 1):
+                    v += ((wz if e else 1 - wz) * (wt if a else 1 - wt) * (wd if b else 1 - wd)
+                          * (wf if c else 1 - wf) * TABLE[iz + e, it + a, idd + b, jf + c])
     return v
 
 
@@ -152,7 +157,7 @@ def fig_lois():
 
 def fig_rt60():
     f = np.geomspace(62.5, 16000.0, 200)
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.6, 3.0), sharey=True)
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(9.6, 3.0), sharey=True)
     cmap = plt.get_cmap("copper")
     for i, t in enumerate((0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.16)):
         ax1.semilogx(f, rt60(t, 0.4, f), color=cmap(0.15 + 0.7 * i / 6), label="Tail %g" % t)
@@ -160,7 +165,11 @@ def fig_rt60():
     for i, d in enumerate((0.0, 0.25, 0.5, 0.75, 1.0)):
         ax2.semilogx(f, rt60(0.6, d, f), color=plt.get_cmap("Blues")(0.35 + 0.6 * i / 4), label="Damping %.2f" % d)
     ax2.set_title("Tail 0,6", fontsize=9)
-    for ax in (ax1, ax2):
+    for i, z in enumerate((0.5, 1.0, 1.5, 2.0)):
+        ax3.semilogx(f, rt60(0.6, 0.4, f, size=z), color=plt.get_cmap("Greens")(0.35 + 0.6 * i / 3),
+                     label="Size %d %%" % round(100 * z))
+    ax3.set_title("Tail 0,6, Damping 0,4", fontsize=9)
+    for ax in (ax1, ax2, ax3):
         ax.set_xlabel("fréquence (Hz), à 44,1 kHz")
         ax.set_xticks([62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000])
         ax.set_xticklabels(["62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"])

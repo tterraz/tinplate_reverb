@@ -15,7 +15,8 @@ measured decay-time display, presets and A/B comparison.
   at 44.1, 48, 96 and 192 kHz, strict and `-ffast-math` builds).
 - The three plate controls of the original with their ranges and laws: **Bandwidth**, **Tail**,
   **Damping**; shown with their meaning (-3 dB frequencies, decay time).
-  **Tail** goes beyond the original range with the same law, up to 10 s at 500 Hz.
+  **Tail** goes beyond the original range with the same law, up to 10 s at 500 Hz; **Size**
+  (50 to 200 %) scales the plate (longer delays: deeper, denser, longer).
 - Smooth automation: every coefficient glides in 20 ms (the original jumps at the next block).
 - **Pre-delay** (0-250 ms, crossfaded changes), **Low cut** on the reverb (12 dB/octave),
   **Width**; faders for the **Dry** and **Reverb** levels (in place of the Blend of the

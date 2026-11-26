@@ -60,6 +60,7 @@ Différences voulues avec l'original :
 | Bandwidth | passe-bas d'entrée (original) ; affiché : sa fréquence à -3 dB à la fréquence d'échantillonnage courante (« open » s'il reste au-dessus de -3 dB jusqu'à Nyquist) |
 | Tail | longueur de la réverbération (original jusqu'à 1 : 5,1 s à 500 Hz) ; jusqu'à 1,16 depuis 1.1.0, même loi (decay 0,869 : 10 s à 500 Hz, Damping au minimum) ; affiché : RT60 à 500 Hz mesuré (voir plus bas) |
 | Damping | passe-bas dans la boucle (original) ; affiché : sa fréquence à -3 dB |
+| Size | (après `v1.1.0`, point C d'`AMELIORATIONS.md` ; choix 1b, 2a, puis 50-200 %) taille de la plaque, 50-200 % : retards et passe-tout de la boucle, passe-tout modulés et 12 prises × Size, arrondis (diffuseurs d'entrée inchangés) ; gain de boucle non compensé (durée ≈ × Size) ; changement glissé en 100 ms, lectures interpolées pendant le glissement seulement (`PlateCore::Plate::setSize`) ; 100 % : identité au bit (le pointeur de lecture est calculé depuis celui d'écriture, mêmes valeurs) ; mémoire pour 200 % ; Clear : la plaque vide prend la taille aussitôt (`finishGlide`) ; test 14 |
 | Freeze | réverbération tenue sans fin : entrée de la plaque fermée, decay à 1, damping supprimé (20 ms), profondeur de modulation à 0 (200 ms) ; le signal sec passe toujours |
 | Dry, Reverb | (1.1.0, à la place de Blend) faders des niveaux du sec et de la réverbération seule, off (-60) à +6 dB ; loi de position par morceaux (off, -40, -24, -12, 0, +6 dB à 0, 0,15, 0,35, 0,55, 0,82, 1) |
 | Width | largeur stéréo de la réverbération (0 % mono, 200 % côté doublé) |
@@ -109,15 +110,16 @@ sont entiers et la boucle ne perd rien (niveau à ±0,3 dB sur 20 s de 100 Hz à
 +0,01 dB en 10 s). Les entrées pendant le gel n'ont aucun effet (sortie identique).
 
 **Temps de réverbération affiché** (`plugin/Rt60.hpp`) : **table mesurée** sur la réponse
-impulsionnelle (`plugin/Rt60Table.hpp`, écrite par `tools/rt60_table.cpp` : 25 Tail de 0 à 1,2
-par pas de 0,05 (points de 1.0.0 identiques) × 9 Damping
+impulsionnelle (`plugin/Rt60Table.hpp`, écrite par `tools/rt60_table.cpp` : 4 Size (50, 100,
+150, 200 %) × 25 Tail de 0 à 1,2 par pas de 0,05 (points de 1.0.0 identiques) × 9 Damping
 × 9 octaves de 62,5 Hz à 16 kHz, à 44,1 kHz ; bande RBJ Q = 2, intégrale de Schroeder, pente
 -5..-25 dB), interpolée linéairement. Le calcul par le seul gain de boucle (decay⁴ et deux
 passages du damping par tour de 0,725 s) donne 20 à 60 % de moins : les passe-tout du réservoir
 (coefficients 0,72) résonnent d'eux-mêmes (0,5-0,65 s même à Tail = 0). À une autre fréquence
 d'échantillonnage fs, la table est lue à f × 44 100 / fs. Test 7 : valeur affichée = nouvelle
-mesure à 10 % près entre les points de la table (10 cas, 44,1 et 96 kHz, dont 3 avec Tail > 1 ;
-écart maximal 7,6 % ; Tail 1,16 : 9,87 s mesurés, 9,94 s affichés).
+mesure à 10 % près entre les points de la table (15 cas, 44,1 et 96 kHz, dont 3 avec Tail > 1 et
+5 à d'autres tailles ; écart maximal 7,6 % ; Tail 1,16 : 9,87 s mesurés, 9,94 s affichés).
+Échelle du graphique : 2 à 32 s.
 
 Préréglages d'usine : Default, Original (CAPS), Vocal plate, Drum plate, Ambience, Dark and
 long, Bright and wide, Send (100 % wet), Ducked vocal (1.1.0) ; réglés à la lecture des lois, **pas à l'oreille**.
@@ -164,10 +166,10 @@ Installation manuelle sous Windows : copier `bin/windows/tinplate_reverb.vst3` (
 dans `C:\Program Files\Common Files\VST3\`, `tinplate_reverb.clap` dans `...\Common Files\CLAP\`.
 
 Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt60_table.cpp`
-(2 min 10 s de calcul en 1.1.0, 25 × 9 réponses de 30 s).
+(4 min 46 s, un fil par taille, 4 × 25 × 9 réponses de 45 s).
 
 ## Vérifications (2026-11-25 ; 1.1.0 le 2026-11-26)
-- `tests/test_dsp.cpp` (47 contrôles, deux compilations) : identité au bit avec CAPS (32 cas, plus 20 mélanges à l'arrondi),
+- `tests/test_dsp.cpp` (54 contrôles, deux compilations) : identité au bit avec CAPS (32 cas, plus 20 mélanges à l'arrondi),
   Bypass exact, Pre-delay (réponse décalée d'exactement le retard), Low cut (-40 dB à 50 Hz pour
   500 Hz), Width (0 % : L = R exactement ; 200 % : côté × 2), Freeze (niveau, entrée ignorée,
   décroissance ensuite), RT60 affiché contre mesuré, lissage de Dry/Reverb et du Pre-delay, niveau Dry,
@@ -175,6 +177,8 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   tenue, 6 dB pour 6 dB de dépassement (5,4 mesurés : crête par échantillon), attaque à 63 % en
   10 ms, retour au bit près après la baisse, Duck 0 identique) ; Clear (test 12) ; Link (test 13 : Dry meneur en liant, puis
   automation de Reverb seule, sortie au bit près celle des deux niveaux réglés à la main).
+- Test 14 (Size) : passage de 100 à 200 % pendant la lecture sans clic (plus grand saut 0,026
+  contre 0,028 à taille fixe) ; RT60 à 500 Hz 2,08 s à 100 %, 4,25 s à 200 %.
 - `tests/test_prefs.cpp` (7) et `tests/test_user_presets.cpp` (17, sous locale `fr_FR.UTF-8`).
 - Validateur VST3 de Steinberg : 47/47 sur le VST3 Linux et sur le VST3 Windows (sous Wine) ;
   1.1.0 : 47/47 sur les deux (script corrigé pour MinGW comme Noise Padifier :
@@ -224,5 +228,4 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   vrai hôte. Release et étiquette `v1.0.0` supprimées de GitHub le 2026-11-26
   (demande de l'utilisateur, aucun utilisateur de 1.0.0) : `v1.1.0` est la seule release.
 - Pistes non faites : réglages des préréglages à l'oreille ;
-  coupe-haut de la réverbération, modulation réglable, taille de la plaque (les longueurs des
-  retards sont celles de l'original).
+  autres pistes dans `AMELIORATIONS.md`.

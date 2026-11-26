@@ -146,7 +146,7 @@ static const Rect kPlot    = { 150, 600, 680, 104 };   // decay time against fre
 // knobs and faders (a fader: cx, cy = centre of its track, r = half its length)
 enum { kKnobPredelay = 0, kKnobBandwidth, kKnobTail, kKnobDamping, kKnobWet, kKnobWidth, kKnobLowCut,
        kKnobOutput, kKnobDuck, kKnobThreshold, kKnobAttack, kKnobRelease, kKnobFloor, kKnobTrigger, kKnobFade,
-       kKnobWindow, kKnobDry, kNumKnobs };
+       kKnobWindow, kKnobDry, kKnobSize, kNumKnobs };
 
 struct KnobDef {
     int param;
@@ -201,11 +201,14 @@ static const KnobDef kKnobs[kNumKnobs] = {
     { kParamWindow,    838.0f, 520.0f, 20.0f, "WINDOW",
       "Clear: longest time for the input to go from Floor to Trigger to count as an attack. "
       "Short: only sharp attacks (drums, plucks); long: softer ones too." },
+    { kParamSize,      555.0f, 330.0f, 18.0f, "SIZE",
+      "Size of the plate: lengths of its delays, 50 to 200 % (100 %: the original). Larger: deeper, "
+      "denser and longer (the decay grows with the size). A change glides in 100 ms (brief pitch glide)." },
     { kParamDry,       745.0f, 215.0f, 95.0f, "DRY",
       "Level of the dry signal, dB (at the bottom: off). Not delayed: no latency." },
 };
 
-static const Rect kFreeze  = { 380, 318, 110, 30 };
+static const Rect kFreeze  = { 300, 318, 110, 30 };
 static const Rect kRt      = { 270, 360, 330, 80 };    // decay time readout
 static const Rect kPreset  = { 384, 16, 196, 26 };     // drop-down box; the list opens below it
 static const Rect kAB      = { 588, 17, 50, 24 };      // A | B
@@ -1216,7 +1219,7 @@ private:
         const char* fmt = "%.1f";
         if (p <= kParamDamping)
             fmt = "%.3f";
-        else if (p == kParamPredelay || p == kParamLowCut || p == kParamWidth || p == kParamThreshold
+        else if (p == kParamPredelay || p == kParamLowCut || p == kParamWidth || p == kParamSize || p == kParamThreshold
                  || p == kParamRelease || p == kParamFloor || p == kParamTrigger || p == kParamFade
                  || p == kParamWindow)
             fmt = "%.0f";
@@ -1228,7 +1231,8 @@ private:
     {
         if (frozen())
             return INFINITY;
-        return TinplateRt60::seconds(fValues[kParamTail], fValues[kParamDamping], hz, sampleRate());
+        return TinplateRt60::seconds(fValues[kParamTail], fValues[kParamDamping], fValues[kParamSize] * 0.01f, hz,
+                                     sampleRate());
     }
 
     static void frequencyText(const double hz, char* buf, const size_t size)
@@ -1260,7 +1264,8 @@ private:
             break;
         case kParamTail:
             std::snprintf(buf, size, detail ? "%.3f (RT60 %.2f s at 500 Hz)" : "%.2f  |  %.1f s", v,
-                          TinplateRt60::seconds(v, fValues[kParamDamping], 500.0, sampleRate()));
+                          TinplateRt60::seconds(v, fValues[kParamDamping], fValues[kParamSize] * 0.01f, 500.0,
+                                                sampleRate()));
             break;
         case kParamWet:
         case kParamDry:
@@ -1276,7 +1281,8 @@ private:
             else
                 std::snprintf(buf, size, "%.0f Hz", v);
             break;
-        case kParamWidth:  std::snprintf(buf, size, "%.0f %%", v); break;
+        case kParamWidth:
+        case kParamSize:   std::snprintf(buf, size, "%.0f %%", v); break;
         case kParamOutput: std::snprintf(buf, size, "%+.1f dB", v); break;
         case kParamDuck:
             if (v < 0.05f)
@@ -1548,6 +1554,7 @@ private:
         drawKnob(kKnobTail);
         drawKnob(kKnobDamping);
         globalAlpha(1.0f);
+        drawKnob(kKnobSize);   // acts while frozen too (pitch glide of the frozen sound)
         divider(kSecTank.x + 12, kSecTank.x + kSecTank.w - 12, 300);
 
         button(kFreeze, frozen, nullptr);
@@ -1960,7 +1967,7 @@ private:
         fillColor(fT->plot);
         fill();
 
-        // time scale: 2, 4, 6, 8, 10 or 12 s full scale
+        // time scale: 2, 4, 6, 8, 10, 12, 16, 20, 24 or 32 s full scale
         double top = 0.0;
         for (int j = 0; j <= 60; ++j)
         {
@@ -1968,7 +1975,8 @@ private:
             top = std::fmax(top, frozen() ? 0.0 : decaySeconds(hz));
         }
         const double full = frozen() ? 6.0 : top <= 1.9 ? 2.0 : top <= 3.8 ? 4.0 : top <= 5.7 ? 6.0
-                          : top <= 7.6 ? 8.0 : top <= 9.5 ? 10.0 : 12.0;
+                          : top <= 7.6 ? 8.0 : top <= 9.5 ? 10.0 : top <= 11.4 ? 12.0 : top <= 15.2 ? 16.0
+                          : top <= 19.0 ? 20.0 : top <= 22.8 ? 24.0 : 32.0;
         const auto ty = [&](const double s) {
             return r.y + r.h * (1.0f - static_cast<float>(std::fmin(s / full, 1.0)));
         };
