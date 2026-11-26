@@ -180,6 +180,11 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   automation de Reverb seule, sortie au bit près celle des deux niveaux réglés à la main).
 - Test 14 (Size) : passage de 100 à 200 % pendant la lecture sans clic (plus grand saut 0,026
   contre 0,028 à taille fixe) ; RT60 à 500 Hz 2,08 s à 100 %, 4,25 s à 200 %.
+- Banc de CPU (`tests/bench_cpu.cpp`, hors `build.sh`, commande en tête du fichier ; point K,
+  2026-11-26, `taskset -c 2`) : préréglage Default, 124 ns par trame stéréo à 44,1 kHz (0,55 %
+  d'un cœur), 127 ns à 192 kHz (2,4 %) ; silence identique (pas de dénormaux) ; Clear avec
+  fondus 40 % du temps, Size en glissement permanent, ducking actif : +20 à +40 % (au plus
+  178 ns, 3,4 % d'un cœur à 192 kHz). Mesures à ±10 % (bruit d'une exécution à l'autre).
 - `tests/test_prefs.cpp` (7) et `tests/test_user_presets.cpp` (17, sous locale `fr_FR.UTF-8`).
 - Validateur VST3 de Steinberg : 47/47 sur le VST3 Linux et sur le VST3 Windows (sous Wine) ;
   1.1.0 : 47/47 sur les deux (script corrigé pour MinGW comme Noise Padifier :

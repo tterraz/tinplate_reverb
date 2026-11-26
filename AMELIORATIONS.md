@@ -28,8 +28,9 @@ demandera un nouveau numéro de version. Détails de l'existant : `LISEZMOI.md`.
   les préréglages à l'oreille (par l'utilisateur).
 
 ## Qualité et diffusion
-- **K. Banc de CPU** (comme Brimstone, point H) : coût par échantillon à 44,1, 96 et 192 kHz,
-  avec et sans fondu de Clear (deux plaques), et dans le silence (dénormaux).
+- **K. Banc de CPU** : **fait** (`tests/bench_cpu.cpp`) : 0,55 % d'un cœur à 44,1 kHz, 2,4 % à
+  192 kHz ; Clear, Size en glissement, ducking : +20 à +40 % ; silence sans surcoût. Rien à
+  optimiser.
 - **L. Manuel en anglais** (`doc/manual.pdf`, comme Noise Padifier) : la release est publique
   et le README est en anglais.
 - **M. Validation** : validateur CLAP (`clap-validator`) ; essai dans un vrai logiciel audio
