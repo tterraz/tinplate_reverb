@@ -23,24 +23,27 @@ Cœur identique à l'original (`plugin/PlateCore.hpp`, transcription de `PlateSt
   44,1 kHz) → retard → passe-bas « damping » → × decay → passe-tout → retard → × decay ;
 - sortie : 6 prises par canal, × 0,6.
 
-Les quatre réglages gardent les plages 0..1 (Tail : 0..1,16 depuis 1.1.0, même loi au-delà de 1)
-et les lois de l'original (`TinplateParams.hpp`) :
+Les trois réglages de la plaque gardent les plages 0..1 (Tail : 0..1,16 depuis 1.1.0, même loi
+au-delà de 1) et les lois de l'original (`TinplateParams.hpp`) :
 bandwidth a0 = exp(-π(1 - (0,005 + 0,994 p))), decay = 0,749 p, damping a0 =
-exp(-π(0,0005 + 0,9995 p)), wet = blend^1,53 et dry = 1 - wet. Valeurs par défaut : celles
-qu'un hôte LADSPA donne à PlateX2 (0,5 ; 0,5 ; 0,75 ; 0,25). Les mêmes types flottants que
+exp(-π(0,0005 + 0,9995 p)). Valeurs par défaut : celles qu'un hôte LADSPA donne à PlateX2
+(0,5 ; 0,5 ; 0,75). Le Blend de l'original (wet = blend^1,53, dry = 1 - wet) est remplacé en
+1.1.0 par deux faders en dB, Dry et Reverb (décision de l'utilisateur). Les mêmes types flottants que
 l'original sont employés opération par opération (échantillons en `float`, certaines sommes en
 `double`), y compris la constante « normal » de ±1e-20 ajoutée à l'entrée contre les nombres
 dénormaux.
 
-**Identité avec l'original** : avec les ajouts au neutre (préréglage « Original (CAPS) », ou tout
-réglage des quatre commandes avec Pre-delay 0, Low cut off, Width 100 %, Output 0 dB, Freeze off),
-la sortie est **celle de l'original au bit près**, réglages fixes (test 1 : 28 cas, 7 réglages ×
-44,1, 48, 96 et 192 kHz, blocs de tailles variées ; aussi bien en compilation stricte qu'avec les
-options de DPF `-O3 -ffast-math`). La référence est le code de CAPS lui-même (`tests/caps/`, sources
+**Identité avec l'original** : avec les ajouts au neutre (Pre-delay 0, Low cut off, Width 100 %,
+Output 0 dB, Freeze, Duck et Clear off) et Tail ≤ 1, la sortie est **celle de l'original au bit
+près** en réverbération seule (Reverb 0 dB, Dry off = Blend 1) et en sec seul (Dry 0 dB, Reverb
+off = Blend 0), réglages fixes (test 1 : 32 cas, 7 réglages × 44,1, 48, 96 et 192 kHz, blocs de
+tailles variées, en compilation stricte). Mélanges (Blend converti en dB) : écart d'arrondi des
+gains, 1,3e-7 de la crête au plus (20 cas) ; options de DPF `-O3 -ffast-math` : < 1e-5. La référence est le code de CAPS lui-même (`tests/caps/`, sources
 d'origine non modifiées), appelé par son descripteur LADSPA comme le ferait un hôte.
 
 Chaîne : (L + R + normal) / 2 → Pre-delay → × entrée (Freeze) → plaque → Low cut → Width →
-wet ; sortie = wet × blend^1,53 + sec × (1 - blend^1,53) → Output → fondu du Bypass.
+× ducking → wet ; sortie = wet × 10^(Reverb/20) + sec × 10^(Dry/20) → Output → fondu du Bypass
+(niveaux à -60 dB : gain 0 ; à 0 dB : exactement 1).
 Latence nulle.
 
 Différences voulues avec l'original :
@@ -58,14 +61,17 @@ Différences voulues avec l'original :
 | Tail | longueur de la réverbération (original jusqu'à 1 : 5,1 s à 500 Hz) ; jusqu'à 1,16 depuis 1.1.0, même loi (decay 0,869 : 10 s à 500 Hz, Damping au minimum) ; affiché : RT60 à 500 Hz mesuré (voir plus bas) |
 | Damping | passe-bas dans la boucle (original) ; affiché : sa fréquence à -3 dB |
 | Freeze | réverbération tenue sans fin : entrée de la plaque fermée, decay à 1, damping supprimé (20 ms), profondeur de modulation à 0 (200 ms) ; le signal sec passe toujours |
-| Blend | sec/traité (original : wet = blend^1,53) ; à 1 : réverbération seule (départ auxiliaire) |
+| Dry, Reverb | (1.1.0, à la place de Blend) faders des niveaux du sec et de la réverbération seule, off (-60) à +6 dB ; loi de position par morceaux (off, -40, -24, -12, 0, +6 dB à 0, 0,15, 0,35, 0,55, 0,82, 1) |
 | Width | largeur stéréo de la réverbération (0 % mono, 200 % côté doublé) |
 | Low cut | passe-haut à 12 dB/octave sur la réverbération seule, 20 Hz (off) à 1 kHz, bouton logarithmique |
-| Output | gain de toute la sortie, -24..+12 dB |
+| Output | gain de toute la sortie, -24..+12 dB (fader depuis 1.1.0) |
+| Link | (1.1.0) icône chaîne (liée, dorée) / chaîne brisée au-dessus des faders ; paramètre `link` appliqué par le DSP (l'automation le suit) : gains dry + reverb = 1 (le Blend de l'original), le meneur ≤ 0 dB ; meneur = dernier des deux niveaux reçus par `setParameterValue` (fenêtre ou hôte), Dry quand on lie (`fLinkLeader`, `TinplateLaw::linkedDb`) ; la fenêtre affiche le même calcul et, à la souris, écrit les deux paramètres ; dans les préréglages et A/B (test 13) |
 | Bypass | paramètre Bypass déclaré à l'hôte, fondu de 10 ms |
 | Duck | (1.1.0) ducking : baisse maximale de la réverbération pendant que l'entrée joue, 0-30 dB (0 = off, défaut) |
 | Threshold | seuil du ducking sur la crête de l'entrée, -60..0 dBFS (défaut -30) |
 | Attack, Release | constantes de temps du ducking, 1-200 ms (10) et 50-3000 ms (300), boutons logarithmiques |
+| Clear | (1.1.0) chaque nouvelle attaque vide la plaque (défaut : éteint) |
+| Floor, Trigger, Fade, Window | seuil d'armement -80..-20 dBFS (-50), seuil d'attaque -60..0 dBFS (-20), fondu de l'ancienne plaque 10-500 ms (60, logarithmique), fenêtre de détection 1-200 ms (20, logarithmique) |
 
 **Ducking** (1.1.0, `TinplatePlugin.cpp`, `TinplateDuck::targetDb`) : crête de l'entrée
 max(|L|, |R|) avant le Pre-delay ; baisse visée = dépassement du seuil en dB, au plus Duck ;
@@ -73,9 +79,25 @@ lissée en dB par un filtre du premier ordre (Attack à la montée, Release à l
 10^(-c/20) sur la réverbération après Width, avant le mélange ; la plaque n'est pas touchée.
 Duck 0 et baisse revenue sous 1e-3 dB : gain non appliqué, sortie au bit près sans ducking
 (test 11). Sortie `meter_duck` (baisse en dB) pour le vu-mètre CUT. Pas d'entrée latérale
-(sidechain externe écarté, décision de l'utilisateur). Les paramètres ajoutés sont placés après
-Bypass : les index de 1.0.0 (automation des hôtes) ne changent pas ; préréglages par la table
-`kPresetParams` (12 valeurs, les 8 premières de 1.0.0 ; états A/B de 1.0.0 à 8 valeurs relus).
+(sidechain externe écarté, décision de l'utilisateur).
+
+**Ordre des paramètres** (`TinplateParams.hpp`) : plaque, Wet, Dry, Pre-delay, Low cut, Width,
+Output, ducking, Clear, puis Freeze et Bypass, puis les sorties ; les préréglages (d'usine, de
+l'utilisateur, jeux A/B) couvrent `kParamBandwidth` .. `kParamWindow`. Aucune compatibilité avec
+1.0.0 (aucun projet 1.0.0, dit l'utilisateur) : ordre et symboles changés librement.
+
+**Clear** (1.1.0, variante « deux plaques », choisie par l'utilisateur ; optionnel, éteint par
+défaut) : `fPlate[2]` ; à une attaque, l'autre plaque (vide) devient courante et reçoit l'entrée
+dès cet échantillon ; l'ancienne, entrée fermée, s'éteint en Fade ms (demi-cosinus) puis est
+vidée (`activate`) et cesse de calculer. Détection : enveloppe de crête de l'entrée avant le
+Pre-delay (montée immédiate, descente 30 ms) ; armée sous Floor **et hors fondu** (pas de
+réarmement pendant le fondu, demande de l'utilisateur) ; attaque = dépassement de Trigger moins de
+Window ms après celui de Floor, sinon désarmée. Rien pendant le gel (son gelé gardé, décision de
+l'utilisateur : pas de remplacement du son gelé). Sortie
+`meter_clear` (0 attente, 1 armée, 2 vidée, tenu 200 ms). Test 12 : après le fondu, sortie au bit
+près celle d'une plaque neuve nourrie depuis l'attaque ; 2e attaque pendant un fondu de 200 ms
+ignorée ; rampe de 500 ms et gel : identiques à Clear éteint ; même rampe avec Window 200 ms :
+vidée.
 
 Les coefficients des filtres d'origine ne dépendent pas de la fréquence d'échantillonnage (les
 retards, si) : à 96 kHz, Bandwidth et Damping coupent deux fois plus haut qu'à 48 kHz, comme dans
@@ -104,9 +126,10 @@ Préréglages de l'utilisateur : comme Brimstone (voir « Interface »).
 ## Interface
 900 × 730 (600 en 1.0.0), redimensionnable (proportions gardées), HiDPI. Trois sections numérotées dans l'ordre
 du signal : **1 INPUT** (Pre-delay, Bandwidth), **2 PLATE** (Tail, Damping, Freeze, RT60 à
-500 Hz, 125 Hz et 4 kHz ; Tail et Damping grisés pendant le gel), **3 OUTPUT** (Blend, Width,
-Low cut, Output ; vu-mètres IN, REVERB, OUT). Dessous, la bande **4 DUCKING** (Duck, Threshold,
-Attack, Release, grisés sauf Duck quand Duck = 0 ; vu-mètre CUT 0-30 dB). En bas : **temps de
+500 Hz, 125 Hz et 4 kHz ; Tail et Damping grisés pendant le gel), **3 OUTPUT** (Width, Low cut ;
+faders DRY, REVERB, OUTPUT ; vu-mètres IN, REVERB, OUT). Dessous, la bande **4 DUCKING** (Duck, Threshold,
+Attack, Release, grisés sauf Duck quand Duck = 0 ; vu-mètre CUT 0-30 dB) et **5 CLEAR** (bouton,
+état waiting/ARMED/CLEARED, Floor, Trigger, Fade, Window grisés si éteint). En bas : **temps de
 réverbération en fonction de la fréquence** (laiton, secondes, échelle de 2 à 12 s selon la courbe) et **tonalité de la
 réverbération** (acier, tirets, dB : Bandwidth et Low cut).
 
@@ -117,10 +140,12 @@ Repris de Brimstone tel quel (même comportement, voir `../brimstone_vst3/LISEZM
 - **préréglages** : liste déroulante (FACTORY puis USER, « Save current settings... »,
   suppression par la croix cliquée deux fois, molette sur la boîte fermée) ; fichiers
   `<nom>.preset` dans `%APPDATA%\Tinplate\presets\` ou `~/.config/tinplate/presets/` (clés :
-  symboles des paramètres, `bandwidth`, `tail`, `damping`, `blend`, `predelay`, `lowcut`, `width`,
-  `output` ; Freeze et Bypass exclus) ;
+  symboles des paramètres, `bandwidth`, `tail`, `damping`, `wet`, `dry`, `link`, `predelay`, `lowcut`, `width`,
+  `output`, `duck`, `threshold`, `attack`, `release`, `clear`, `floor`, `trigger`, `fade`,
+  `window` ; Freeze et Bypass exclus) ;
 - **A/B** : deux jeux de réglages, état DPF `ab` enregistré avec le projet ;
-- **thèmes** Slate (sombre) et Tin (clair), pastille SLATE | TIN, préférence de l'utilisateur
+- **thèmes** Slate (sombre) et Tin (clair ; panneaux et graphique teintés de cuivre à 12 % depuis 1.1.0, fond de fenêtre, en-tête, boutons et faders neutres,
+  demande de l'utilisateur), pastille SLATE | TIN, préférence de l'utilisateur
   dans `tinplate.conf` (`theme=slate|tin`), non enregistrée avec le projet.
 Code : `plugin/TinplateUI.cpp`, `TinplatePrefs.hpp`, `TinplateUserPresets.hpp`.
 
@@ -142,15 +167,15 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
 (2 min 10 s de calcul en 1.1.0, 25 × 9 réponses de 30 s).
 
 ## Vérifications (2026-11-25 ; 1.1.0 le 2026-11-26)
-- `tests/test_dsp.cpp` (37 contrôles, deux compilations) : identité au bit avec CAPS (28 cas),
+- `tests/test_dsp.cpp` (47 contrôles, deux compilations) : identité au bit avec CAPS (32 cas, plus 20 mélanges à l'arrondi),
   Bypass exact, Pre-delay (réponse décalée d'exactement le retard), Low cut (-40 dB à 50 Hz pour
   500 Hz), Width (0 % : L = R exactement ; 200 % : côté × 2), Freeze (niveau, entrée ignorée,
-  décroissance ensuite), RT60 affiché contre mesuré, lissage de Blend et du Pre-delay,
+  décroissance ensuite), RT60 affiché contre mesuré, lissage de Dry/Reverb et du Pre-delay, niveau Dry,
   préréglages, vu-mètres, état A/B, état du FPU rendu ; ducking (test 11 : baisse de 12 dB
   tenue, 6 dB pour 6 dB de dépassement (5,4 mesurés : crête par échantillon), attaque à 63 % en
-  10 ms, retour au bit près après la baisse, Duck 0 identique).
-- `tests/test_prefs.cpp` (7) et `tests/test_user_presets.cpp` (19, sous locale `fr_FR.UTF-8` ;
-  préréglage de 1.0.0 sans les clés du ducking : ducking off).
+  10 ms, retour au bit près après la baisse, Duck 0 identique) ; Clear (test 12) ; Link (test 13 : Dry meneur en liant, puis
+  automation de Reverb seule, sortie au bit près celle des deux niveaux réglés à la main).
+- `tests/test_prefs.cpp` (7) et `tests/test_user_presets.cpp` (17, sous locale `fr_FR.UTF-8`).
 - Validateur VST3 de Steinberg : 47/47 sur le VST3 Linux et sur le VST3 Windows (sous Wine) ;
   1.1.0 : 47/47 sur les deux (script corrigé pour MinGW comme Noise Padifier :
   `CMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY`).
@@ -160,7 +185,8 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   Refait avec le manuel (session 68) : PDF installé identique à `doc/manuel.pdf`, raccourci
   dans `ProgramData\...\Start Menu\Programs\Tinplate Reverb\`, puis tout retiré.
 - Interface affichée par la version autonome Windows sous Wine, deux thèmes (captures, refaites
-  en 1.1.0 avec le préréglage Ducked vocal).
+  en 1.1.0 avec le préréglage Ducked vocal ; Tin : Clear allumé, bulle d'aide de Clear,
+  `-DTINPLATE_UI_DEMO=112 -DTINPLATE_UI_DEMO_CLEAR=1`).
 - **Non vérifié** : écoute (aucun réglage n'a été jugé à l'oreille) ; chargement dans un vrai
   logiciel audio ; clics et saisie dans un hôte ; installateur graphique et vrai Windows ;
   sortie identique à un binaire de CAPS distribué (compilé avec `-ffast-math` par un autre
@@ -192,10 +218,13 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   Le nom du greffon reste provisoire : le changer demande aussi de renommer le dépôt GitHub et de
   refaire une release.
 - **1.1.0 (2026-11-26, non publiée)** : ducking interne (Duck, Threshold, Attack, Release,
-  vu-mètre CUT, préréglage Ducked vocal) et Tail jusqu'à 1,16 (10 s à 500 Hz) ; fenêtre
-  900 × 730 ; manuel 14 pages (figure `fig_duck.pdf`). Version 1.1.0 dans `getVersion`,
+  vu-mètre CUT, préréglage Ducked vocal), Tail jusqu'à 1,16 (10 s à 500 Hz) et Clear (vidage à
+  chaque attaque, deux plaques) ; fenêtre 900 × 730 ; manuel 15 pages (figure `fig_duck.pdf`). Version 1.1.0 dans `getVersion`,
   l'installateur, `README.md`, le manuel. Reste : écoute du ducking et des longues queues,
-  vrai hôte, release GitHub `v1.1.0` (sur demande).
+  vrai hôte, release GitHub `v1.1.0` (sur demande). **À faire (demande de l'utilisateur)** :
+  supprimer l'étiquette et la release `v1.0.0` sur GitHub (aucun utilisateur de 1.0.0) ; à faire
+  avec son accord au moment voulu (`/usr/bin/gh release delete v1.0.0 --repo
+  tterraz/tinplate_reverb --cleanup-tag`).
 - Pistes non faites : réglages des préréglages à l'oreille ;
   coupe-haut de la réverbération, modulation réglable, taille de la plaque (les longueurs des
   retards sont celles de l'original).

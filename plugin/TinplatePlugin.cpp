@@ -15,11 +15,16 @@
  * Signal flow:
  *   x = (L + R + normal) / 2 -> pre-delay -> x input gain (freeze) -> plate tank
  *     -> low cut -> width -> x ducking gain -> wet;
- *   out = wet x blend^1.53 + dry x (1 - blend^1.53) -> output gain -> bypass crossfade
+ *   out = wet x wet level + dry x dry level -> output gain -> bypass crossfade
+ *   (levels in dB, -60 = off; CAPS has a blend instead: wet level blend^1.53, dry 1 - that;
+ *   Link: the level changed last, by the interface or the host, sets the other one so that
+ *   the gains add up to 1, as the blend; when linking, the dry level leads)
  *
- * With pre-delay 0, low cut off, width 100 %, output 0 dB, freeze off (preset "Original
- * (CAPS)" and any values of the four controls), the output is that of the original, sample for
- * sample, when the controls stay still (tests/test_dsp.cpp, against the original code).  The
+ * With pre-delay 0, low cut off, width 100 %, output 0 dB, freeze, ducking and clear off, and
+ * wet only (wet 0 dB, dry off) or dry only, the output is that of the original with blend 1 or
+ * 0, sample for sample, for any values of bandwidth, tail (up to 1) and damping, when the
+ * controls stay still (tests/test_dsp.cpp, against the original code).  Other mixes: the gains
+ * from dB differ from blend^1.53 by rounding only.  The
  * original applies a change of a control at the next block (zipper noise on Tail and Blend);
  * here every coefficient goes linearly to its new value in 20 ms, then takes it exactly.
  *
@@ -39,6 +44,15 @@
  * when the cut grows, release when it shrinks.  Depth 0 and the cut back under 1e-3 dB: the
  * gain is not applied at all (output to the bit as without ducking).  Freeze: the frozen tail is
  * ducked too.
+ *
+ * Clear (1.1.0): a new attack empties the plate.  Two plates: the input goes into the current
+ * one; at an attack, the other one (empty) becomes current and the old one, its input closed,
+ * fades out (raised cosine, Fade ms), is then emptied and stops computing.  Detection on the
+ * input peak envelope max(|L|, |R|) (instant attack, release 30 ms), before the pre-delay: armed
+ * while it stays under Floor, once the fade of the old plate has ended; an attack is a rise
+ * from under Floor to over Trigger within Window ms (default 20); a slower rise disarms until the input falls
+ * under Floor again.  No clearing while frozen (the frozen sound is kept).  Clear off: only
+ * the first plate runs, the output is to the bit that without Clear.
  *
  * Pre-delay: integer delay in samples; a change crossfades from the old to the new delay in
  * 30 ms (no pitch glide), the next change waits for the end of the crossfade.
@@ -205,7 +219,7 @@ protected:
     const char* getDescription() const override
     {
         return "Plate reverb after CAPS PlateX2 (Plate2x2) by Tim Goetze: Dattorro's plate, "
-               "with pre-delay, low cut, width, freeze and ducking.";
+               "with pre-delay, low cut, width, freeze, ducking and clear.";
     }
     const char* getMaker() const override { return "Tinplate"; }
     const char* getLicense() const override { return "GPL-3.0-or-later"; }
@@ -229,7 +243,12 @@ protected:
         case kParamBandwidth: set(p, "Bandwidth", "bandwidth", ""); break;
         case kParamTail:      set(p, "Tail", "tail", ""); break;
         case kParamDamping:   set(p, "Damping", "damping", ""); break;
-        case kParamBlend:     set(p, "Blend", "blend", ""); break;
+        case kParamWet:       set(p, "Reverb level", "wet", "dB"); break;
+        case kParamDry:       set(p, "Dry level", "dry", "dB"); break;
+        case kParamLink:
+            set(p, "Dry / reverb link", "link", "");
+            p.hints |= kParameterIsBoolean | kParameterIsInteger;
+            break;
         case kParamPredelay:  set(p, "Pre-delay", "predelay", "ms"); break;
         case kParamLowCut:
             set(p, "Low cut", "lowcut", "Hz");
@@ -254,6 +273,26 @@ protected:
             set(p, "Duck release", "release", "ms");
             p.hints |= kParameterIsLogarithmic;
             break;
+        case kParamClear:
+            set(p, "Clear", "clear", "");
+            p.hints |= kParameterIsBoolean | kParameterIsInteger;
+            break;
+        case kParamFloor:   set(p, "Clear floor", "floor", "dB"); break;
+        case kParamTrigger: set(p, "Clear trigger", "trigger", "dB"); break;
+        case kParamFade:
+            set(p, "Clear fade", "fade", "ms");
+            p.hints |= kParameterIsLogarithmic;
+            break;
+        case kParamWindow:
+            set(p, "Clear window", "window", "ms");
+            p.hints |= kParameterIsLogarithmic;
+            break;
+        case kParamMeterClear:
+            output(p, "Clear state", "meter_clear", "");
+            p.ranges.min = 0.0f;
+            p.ranges.max = 2.0f;
+            p.ranges.def = 0.0f;
+            break;
         case kParamMeterDuck:
             output(p, "Duck cut", "meter_duck", "dB");
             p.ranges.min = 0.0f;
@@ -275,7 +314,7 @@ protected:
             return;
         state.key = kStateKeys[index];
         state.defaultValue = "";
-        state.label = "A/B comparison";
+        state.label = kStateLabels[index];
         state.hints = kStateIsOnlyForUI;
     }
 
@@ -299,7 +338,8 @@ protected:
         if (index >= static_cast<uint32_t>(kTinplatePresetCount))
             return;
         for (int i = 0; i < kPresetParamCount; ++i)
-            fParams[kPresetParams[i]] = kTinplatePresets[index].values[i];
+            fParams[i] = kTinplatePresets[index].values[i];
+        fLinkLeader = kParamDry;
     }
 
     float getParameterValue(const uint32_t index) const override
@@ -309,8 +349,14 @@ protected:
 
     void setParameterValue(const uint32_t index, const float value) override
     {
-        if (index < static_cast<uint32_t>(kParamFirstOutput))
-            fParams[index] = value;
+        if (index >= static_cast<uint32_t>(kParamFirstOutput))
+            return;
+        // link: the dry or wet level changed last leads; when linking, the dry one
+        if (index == kParamDry || index == kParamWet)
+            fLinkLeader = static_cast<int>(index);
+        else if (index == kParamLink && value > 0.5f && fParams[kParamLink] <= 0.5f)
+            fLinkLeader = kParamDry;
+        fParams[index] = value;
     }
 
     void activate() override
@@ -345,14 +391,44 @@ protected:
             x = preDelay(x) * fInGain.next();
 
             if (fBandwidth.moving())
-                fPlate.setBandwidth(fBandwidth.next());
+            {
+                const float v = fBandwidth.next();
+                fPlate[0].setBandwidth(v);
+                fPlate[1].setBandwidth(v);
+            }
             if (fDamping.moving())
-                fPlate.setDamping(fDamping.next());
+            {
+                const float v = fDamping.next();
+                fPlate[0].setDamping(v);
+                fPlate[1].setDamping(v);
+            }
             if (fModulation.moving())
-                fPlate.setModulation(fModulation.next());
+            {
+                const float v = fModulation.next();
+                fPlate[0].setModulation(v);
+                fPlate[1].setModulation(v);
+            }
 
+            if (fClearOn || fArmed)
+                detectAttack(std::fmax(std::fabs(sl), std::fabs(sr)));
+
+            const float decay = fDecay.next();
             float wl, wr;
-            fPlate.process(x, fDecay.next(), &wl, &wr);
+            fPlate[fCur].process(x, decay, &wl, &wr);
+            if (fFadeLeft > 0)
+            {
+                // the old plate: input closed, fading out, then emptied
+                float ol, orr;
+                fPlate[1 - fCur].process(0.0f, decay, &ol, &orr);
+                const float g = 0.5f + 0.5f * std::cos(static_cast<float>(M_PI)
+                                                       * (1.0f - static_cast<float>(fFadeLeft) / fFadeLength));
+                wl += ol * g;
+                wr += orr * g;
+                if (--fFadeLeft == 0)
+                    fPlate[1 - fCur].activate();
+            }
+            if (fFlash > 0)
+                --fFlash;
 
             if (!fLowCut.identity())
                 fLowCut.process(wl, wr);
@@ -372,11 +448,11 @@ protected:
             }
             peakWet = std::fmax(peakWet, std::fmax(std::fabs(wl), std::fabs(wr)));
 
-            const float blend = fWet.next();
-            const float dry = 1 - blend;
+            const float wet = fWet.next();
+            const float dry = fDry.next();
             const float g = fGain.next();
-            float yl = (blend * wl + dry * sl) * g;
-            float yr = (blend * wr + dry * sr) * g;
+            float yl = (wet * wl + dry * sl) * g;
+            float yr = (wet * wr + dry * sr) * g;
 
             // bypass: the input, crossfaded
             const float b = fBypass.next();
@@ -405,6 +481,7 @@ protected:
         fParams[kParamMeterWet] = gainToDb(fMeterWet, -60.0f);
         fParams[kParamMeterOut] = gainToDb(fMeterOut, -60.0f);
         fParams[kParamMeterDuck] = peakDuck;
+        fParams[kParamMeterClear] = fFlash > 0 ? 2.0f : fArmed ? 1.0f : 0.0f;
     }
 
 private:
@@ -429,7 +506,8 @@ private:
     void allocate()
     {
         const double sr = getSampleRate();
-        fPlate.init(static_cast<float>(sr));
+        fPlate[0].init(static_cast<float>(sr));
+        fPlate[1].init(static_cast<float>(sr));
         const unsigned n = PlateCore::nextPowerOf2(static_cast<unsigned>(0.001 * kTinplateRanges[kParamPredelay].max * sr) + 2);
         fPre.assign(n, 0.0f);
         fPreMask = n - 1;
@@ -447,7 +525,23 @@ private:
         fDamping.set(freeze ? 1.0f : static_cast<float>(TinplateLaw::dampingCoef(fParams[kParamDamping])), n);
         fInGain.set(freeze ? 0.0f : 1.0f, n);
         fModulation.set(freeze ? 0.0f : 1.0f, ramp ? static_cast<int>(0.2 * sr) : 0);
-        fWet.set(TinplateLaw::wet(fParams[kParamBlend]), n);
+        float wetDb = fParams[kParamWet], dryDb = fParams[kParamDry];
+        if (fParams[kParamLink] > 0.5f)
+        {
+            // linked as the blend of CAPS: the leader (at most 0 dB) sets the other
+            if (fLinkLeader == kParamWet)
+            {
+                wetDb = std::fmin(wetDb, 0.0f);
+                dryDb = TinplateLaw::linkedDb(wetDb);
+            }
+            else
+            {
+                dryDb = std::fmin(dryDb, 0.0f);
+                wetDb = TinplateLaw::linkedDb(dryDb);
+            }
+        }
+        fWet.set(TinplateLaw::levelGain(wetDb), n);
+        fDry.set(TinplateLaw::levelGain(dryDb), n);
         fWidth.set(fParams[kParamWidth] * 0.01f, n);
         fGain.set(fParams[kParamOutput] == 0.0f ? 1.0f : dbToGain(fParams[kParamOutput]), n);
         fBypass.set(fParams[kParamBypass] > 0.5f ? 1.0f : 0.0f, ramp ? static_cast<int>(0.01 * sr) : 0);
@@ -458,6 +552,13 @@ private:
         fDuckThreshold = std::pow(10.0f, fDuckThresholdDb * 0.05f);
         fDuckAttack = std::exp(-1000.0 / (std::fmax(fParams[kParamAttack], 0.01f) * sr));
         fDuckRelease = std::exp(-1000.0 / (std::fmax(fParams[kParamRelease], 0.01f) * sr));
+        // clear
+        fClearOn = fParams[kParamClear] > 0.5f;
+        fFloor = std::pow(10.0f, fParams[kParamFloor] * 0.05f);
+        fTrigger = std::pow(10.0f, fParams[kParamTrigger] * 0.05f);
+        fEnvRelease = static_cast<float>(std::exp(-1.0 / (0.03 * sr)));
+        fRiseMax = std::max(1, static_cast<int>(1e-3 * fParams[kParamWindow] * sr));
+        fFlashLength = static_cast<int>(0.2 * sr);
 
         const unsigned pd = static_cast<unsigned>(std::lround(fParams[kParamPredelay] * 1e-3 * sr));
         if (!ramp)
@@ -472,9 +573,12 @@ private:
         }
         if (!ramp)
         {
-            fPlate.setBandwidth(fBandwidth.cur);
-            fPlate.setDamping(fDamping.cur);
-            fPlate.setModulation(fModulation.cur);
+            for (PlateCore::Plate& p : fPlate)
+            {
+                p.setBandwidth(fBandwidth.cur);
+                p.setDamping(fDamping.cur);
+                p.setModulation(fModulation.cur);
+            }
         }
     }
 
@@ -489,6 +593,39 @@ private:
         if (target == 0.0f && fDuckDb < 1e-3f)
             fDuckDb = 0.0f;
         return fDuckDb > 0.0f ? std::exp(-0.11512925f * fDuckDb) : 1.0f;
+    }
+
+    // clear: state of the detection for one input peak; switches the plates at an attack
+    void detectAttack(const float peak)
+    {
+        fEnv = std::fmax(peak, fEnv * fEnvRelease);
+        if (!fClearOn)
+        {
+            fArmed = false;
+            return;
+        }
+        if (fEnv < fFloor)
+        {
+            if (fFadeLeft == 0)   // no re-arming while the old plate fades out
+            {
+                fArmed = true;
+                fRise = 0;
+            }
+            return;
+        }
+        if (!fArmed)
+            return;
+        if (fEnv >= fTrigger)
+        {
+            fArmed = false;
+            if (fParams[kParamFreeze] > 0.5f || fInGain.cur != 1.0f)
+                return;           // frozen (or freezing): the frozen sound is kept
+            fCur = 1 - fCur;
+            fFadeLength = fFadeLeft = std::max(1, static_cast<int>(1e-3 * fParams[kParamFade] * getSampleRate()));
+            fFlash = fFlashLength;
+        }
+        else if (++fRise > fRiseMax)
+            fArmed = false;       // too slow for an attack
     }
 
     float preDelay(const float x)
@@ -508,13 +645,19 @@ private:
 
     void resetState()
     {
-        fPlate.activate();
+        fPlate[0].activate();
+        fPlate[1].activate();
+        fCur = 0;
+        fFadeLeft = fFlash = fRise = 0;
+        fArmed = false;
+        fEnv = 0.0f;
         fBandwidth.reset(0.0f);
         fDecay.reset(0.0f);
         fDamping.reset(0.0f);
         fInGain.reset(0.0f);
         fModulation.reset(0.0f);
         fWet.reset(0.0f);
+        fDry.reset(0.0f);
         fWidth.reset(0.0f);
         fGain.reset(0.0f);
         fBypass.reset(0.0f);
@@ -531,10 +674,10 @@ private:
     float fParams[kParamCount];
     String fStates[kStateCount];   // strings of the interface, only kept for the host
 
-    PlateCore::Plate fPlate;
+    PlateCore::Plate fPlate[2];    // clear: the current one fCur, the other one fading out or empty
     float fNormal = 1e-20f;        // NOISE_FLOOR of CAPS
     bool fRamp = false;
-    Ramp<float> fBandwidth, fDecay, fDamping, fInGain, fModulation, fWet, fWidth, fGain, fBypass;
+    Ramp<float> fBandwidth, fDecay, fDamping, fInGain, fModulation, fWet, fDry, fWidth, fGain, fBypass;
     LowCut fLowCut;
     std::vector<float> fPre;
     unsigned fPreMask = 0, fPrePos = 0, fPreCur = 0, fPreNext = 0;
@@ -542,6 +685,10 @@ private:
     float fMeterIn = 0.0f, fMeterWet = 0.0f, fMeterOut = 0.0f;
     float fDuckDepth = 0.0f, fDuckThresholdDb = 0.0f, fDuckThreshold = 1.0f, fDuckDb = 0.0f;
     float fDuckAttack = 0.0f, fDuckRelease = 0.0f;   // one-pole coefficients
+    int fLinkLeader = kParamDry;   // link: dry or wet level changed last
+    bool fClearOn = false, fArmed = false;
+    int fCur = 0, fFadeLeft = 0, fFadeLength = 1, fFlash = 0, fFlashLength = 1, fRise = 0, fRiseMax = 1;
+    float fFloor = 0.0f, fTrigger = 1.0f, fEnv = 0.0f, fEnvRelease = 0.0f;
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TinplatePlugin)
 };

@@ -15,27 +15,34 @@
 #endif
 
 enum TinplateParam {
-    // inputs: the four controls of CAPS PlateX2 (same 0..1 ranges and laws), then the additions
+    // inputs: the three plate controls of CAPS PlateX2 (same laws), then the additions
     kParamBandwidth = 0,  // input low-pass of the tank (CAPS "bandwidth")
     kParamTail,           // decay of the tank (CAPS "tail"; up to 1.16 here, RT60 10 s at 500 Hz)
     kParamDamping,        // low-pass inside the tank (CAPS "damping")
-    kParamBlend,          // dry / wet (CAPS "blend": wet = blend^1.53, dry = 1 - wet)
+    kParamWet,            // level of the reverb, dB (-60 = off); CAPS has a blend instead
+    kParamDry,            // level of the dry signal, dB (-60 = off)
+    kParamLink,           // dry and wet linked as the blend of CAPS: gains add up to 1 (0/1)
     kParamPredelay,       // delay before the tank, ms
     kParamLowCut,         // high-pass on the wet signal, Hz (minimum = off)
     kParamWidth,          // stereo width of the wet signal, %
     kParamOutput,         // output gain, dB
-    kParamFreeze,         // infinite tail: input of the tank closed, no loss in the tank (0/1)
-    kParamBypass,         // host bypass
-    // added in 1.1.0, after the parameters of 1.0.0 (host automation is by index)
     kParamDuck,           // ducking depth: largest cut of the reverb while the input plays, dB (0 = off)
     kParamThreshold,      // ducking threshold on the input peak, dBFS
     kParamAttack,         // ducking attack, ms
     kParamRelease,        // ducking release, ms
+    kParamClear,          // a new attack empties the plate (0/1)
+    kParamFloor,          // clear: the input under this peak level arms the detection, dBFS
+    kParamTrigger,        // clear: the input over this level soon after triggers, dBFS
+    kParamFade,           // clear: fade out of the old plate, ms
+    kParamWindow,         // clear: longest rise from Floor to Trigger of an attack, ms
+    kParamFreeze,         // infinite tail: input of the tank closed, no loss in the tank (0/1)
+    kParamBypass,         // host bypass
     // outputs
     kParamMeterIn,        // input peak, dBFS
     kParamMeterWet,       // wet (reverb) peak, dBFS
     kParamMeterOut,       // output peak, dBFS
     kParamMeterDuck,      // cut of the reverb by the ducking, dB (positive)
+    kParamMeterClear,     // clear: 0 off or waiting, 1 armed, 2 just cleared (held 200 ms)
     kParamCount
 };
 
@@ -48,35 +55,39 @@ static const TinplateRange kTinplateRanges[kParamCount] = {
     {   0.0f,    1.0f,   0.5f },    // bandwidth
     {   0.0f,   1.16f,   0.5f },    // tail (CAPS: 0..1; same law beyond, RT60 10 s at 500 Hz)
     {   0.0f,    1.0f,  0.75f },    // damping
-    {   0.0f,    1.0f,  0.25f },    // blend
+    { -60.0f,    6.0f, -18.0f },    // wet, dB (-60 = off)
+    { -60.0f,    6.0f,   0.0f },    // dry, dB (-60 = off)
+    {   0.0f,    1.0f,   0.0f },    // link
     {   0.0f,  250.0f,   0.0f },    // pre-delay, ms
     {  20.0f, 1000.0f,  20.0f },    // low cut, Hz (20 = off)
     {   0.0f,  200.0f, 100.0f },    // width, %
     { -24.0f,   12.0f,   0.0f },    // output, dB
-    {   0.0f,    1.0f,   0.0f },    // freeze
-    {   0.0f,    1.0f,   0.0f },    // bypass
     {   0.0f,   30.0f,   0.0f },    // duck, dB (0 = off)
     { -60.0f,    0.0f, -30.0f },    // threshold, dBFS
     {   1.0f,  200.0f,  10.0f },    // attack, ms
     {  50.0f, 3000.0f, 300.0f },    // release, ms
+    {   0.0f,    1.0f,   0.0f },    // clear
+    { -80.0f,  -20.0f, -50.0f },    // floor, dBFS
+    { -60.0f,    0.0f, -20.0f },    // trigger, dBFS
+    {  10.0f,  500.0f,  60.0f },    // fade, ms
+    {   1.0f,  200.0f,  20.0f },    // window, ms
+    {   0.0f,    1.0f,   0.0f },    // freeze
+    {   0.0f,    1.0f,   0.0f },    // bypass
     { -60.0f,    6.0f, -60.0f },    // meter in
     { -60.0f,    6.0f, -60.0f },    // meter wet
     { -60.0f,    6.0f, -60.0f },    // meter out
     {   0.0f,   30.0f,   0.0f },    // meter duck, dB
+    {   0.0f,    2.0f,   0.0f },    // meter clear
 };
 
 static const float kLowCutOff = 20.0f;   // low cut at its minimum: no filter
+static const float kLevelOff = -60.0f;   // dry and wet faders at their minimum: gain 0
 
 // ------------------------------------------------------------------------------------------------
-// Factory presets: values of the parameters kPresetParams (freeze and bypass excluded).  The
-// first eight are those of 1.0.0 (A/B states of 1.0.0 hold only them).
+// Factory presets: values of the parameters kParamBandwidth .. kParamWindow (freeze and bypass
+// excluded).
 
-static const int kPresetParams[] = {
-    kParamBandwidth, kParamTail, kParamDamping, kParamBlend, kParamPredelay, kParamLowCut, kParamWidth,
-    kParamOutput, kParamDuck, kParamThreshold, kParamAttack, kParamRelease,
-};
-static const int kPresetParamCount = sizeof(kPresetParams) / sizeof(kPresetParams[0]);
-static const int kPresetParamCountV1 = 8;
+static const int kPresetParamCount = kParamFreeze;
 
 struct TinplatePreset {
     const char* name;
@@ -84,16 +95,26 @@ struct TinplatePreset {
 };
 
 static const TinplatePreset kTinplatePresets[] = {
-    //                        bandw  tail  damp  blend  pre   lowcut width  out   duck  thresh  att  rel
-    { "Default",            { 0.80f, 0.55f, 0.40f, 0.30f, 12.0f,  60.0f, 100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f } },
-    { "Original (CAPS)",    { 0.50f, 0.50f, 0.75f, 0.25f,  0.0f,  20.0f, 100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f } },
-    { "Vocal plate",        { 0.85f, 0.45f, 0.45f, 0.25f, 35.0f, 150.0f, 110.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f } },
-    { "Drum plate",         { 0.90f, 0.30f, 0.30f, 0.22f,  5.0f, 200.0f, 120.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f } },
-    { "Ambience",           { 0.70f, 0.15f, 0.50f, 0.20f,  0.0f, 100.0f, 130.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f } },
-    { "Dark and long",      { 0.55f, 0.85f, 0.75f, 0.35f, 20.0f,  60.0f, 100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f } },
-    { "Bright and wide",    { 1.00f, 0.70f, 0.10f, 0.30f, 15.0f, 120.0f, 150.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f } },
-    { "Send (100 % wet)",   { 0.80f, 0.60f, 0.40f, 1.00f, 20.0f, 100.0f, 100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f } },
-    { "Ducked vocal",       { 0.85f, 0.65f, 0.45f, 0.35f, 25.0f, 150.0f, 110.0f, 0.0f, 12.0f, -30.0f, 10.0f, 400.0f } },
+    //                      bandw  tail  damp   wet    dry   link  pre   lowcut width  out
+    //                      duck  thresh  att  rel  clear  floor  trigger  fade  window
+    { "Default",          { 0.80f, 0.55f, 0.40f, -16.0f, -1.5f, 0.0f, 12.0f, 60.0f, 100.0f, 0.0f,
+                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Original (CAPS)",  { 0.50f, 0.50f, 0.75f, -18.4f, -1.1f, 0.0f, 0.0f, 20.0f, 100.0f, 0.0f,
+                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Vocal plate",      { 0.85f, 0.45f, 0.45f, -18.4f, -1.1f, 0.0f, 35.0f, 150.0f, 110.0f, 0.0f,
+                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Drum plate",       { 0.90f, 0.30f, 0.30f, -20.1f, -0.9f, 0.0f, 5.0f, 200.0f, 120.0f, 0.0f,
+                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Ambience",         { 0.70f, 0.15f, 0.50f, -21.4f, -0.8f, 0.0f, 0.0f, 100.0f, 130.0f, 0.0f,
+                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Dark and long",    { 0.55f, 0.85f, 0.75f, -14.0f, -1.9f, 0.0f, 20.0f, 60.0f, 100.0f, 0.0f,
+                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Bright and wide",  { 1.00f, 0.70f, 0.10f, -16.0f, -1.5f, 0.0f, 15.0f, 120.0f, 150.0f, 0.0f,
+                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Send (100 % wet)", { 0.80f, 0.60f, 0.40f, 0.0f, -60.0f, 0.0f, 20.0f, 100.0f, 100.0f, 0.0f,
+                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Ducked vocal",     { 0.85f, 0.65f, 0.45f, -14.0f, -1.9f, 0.0f, 25.0f, 150.0f, 110.0f, 0.0f,
+                            12.0f, -30.0f, 10.0f, 400.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
 };
 
 static const int kTinplatePresetCount = sizeof(kTinplatePresets) / sizeof(kTinplatePresets[0]);
@@ -101,6 +122,7 @@ static const int kTinplatePresetCount = sizeof(kTinplatePresets) / sizeof(kTinpl
 // States saved with the project, written by the UI only (the DSP ignores them)
 enum { kStateAB = 0, kStateCount };
 static const char* const kStateKeys[kStateCount] = { "ab" };
+static const char* const kStateLabels[kStateCount] = { "A/B comparison" };
 
 // ------------------------------------------------------------------------------------------------
 // Ducking: the cut of the reverb, dB, for an input peak of a given level (dBFS): as many dB as
@@ -139,10 +161,28 @@ static inline double dampingCoef(const float p)
     return std::exp(-M_PI * (.0005 + .9995 * p));
 }
 
-// wet gain; the dry gain is 1 - wet
+// wet gain of CAPS; the dry gain is 1 - wet
 static inline float wet(const float p)
 {
     return static_cast<float>(std::pow(p, 1.53));
+}
+
+// level in dB of a gain, kLevelOff for 0 (dry and wet faders)
+static inline float levelDb(const float g)
+{
+    return g > 0.0f ? std::fmax(20.0f * std::log10(g), kLevelOff) : kLevelOff;
+}
+
+// wet and dry levels (dB) equivalent to a blend of CAPS (comparison with CAPS in the tests)
+static inline float blendWetDb(const float blend) { return levelDb(wet(blend)); }
+static inline float blendDryDb(const float blend) { return levelDb(1.0f - wet(blend)); }
+
+// gain of a dry or wet level: 0 at kLevelOff, exactly 1 at 0 dB
+static inline float levelGain(const float db)
+{
+    if (db <= kLevelOff)
+        return 0.0f;
+    return db == 0.0f ? 1.0f : std::pow(10.0f, db * 0.05f);
 }
 
 // gain of a one-pole low-pass y = a x + (1 - a) y1 at frequency f
@@ -162,6 +202,13 @@ static inline double onePoleCutoff(const double a, const double fs)
     if (c <= -1.0)
         return 0.0;
     return std::acos(std::fmin(c, 1.0)) * fs / (2.0 * M_PI);
+}
+
+// linked dry and wet (kParamLink): the level of the other one, dB, for the level of the one
+// that leads (at most 0 dB): gains adding up to 1, as the blend of CAPS
+static inline float linkedDb(const float leaderDb)
+{
+    return levelDb(1.0f - levelGain(std::fmin(leaderDb, 0.0f)));
 }
 
 }   // namespace TinplateLaw

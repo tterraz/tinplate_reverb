@@ -7,8 +7,10 @@
  *
  * 1. Original: with the additions neutral, output == the original CAPS PlateX2 (tests/caps/,
  *    driven through LADSPA), for 7 settings of the four controls at 44.1, 48, 96 and 192 kHz,
- *    odd block sizes.  Strict build: identical to the bit; -ffast-math build: both codes are
- *    optimised differently, the gap is reported and must stay at rounding level.
+ *    odd block sizes.  Wet only (blend 1: reverb 0 dB, dry off) and dry only (blend 0): strict
+ *    build identical to the bit.  Other blends, as levels in dB: rounding of the gains only.
+ *    -ffast-math build: both codes are optimised differently, the gap is reported and must stay
+ *    at rounding level.
  * 2. Bypass: output == input, exactly.
  * 3. Pre-delay: the wet response starts exactly that many samples later (not identical
  *    afterwards: the modulation of the tank runs from the start).
@@ -24,6 +26,11 @@
  * 10. Meters; state of the interface kept; FPU state of the caller restored after run().
  * 11. Ducking: steady cut (depth, threshold), attack time, meter of the cut; once the cut is
  *     back to 0, output identical to the bit to a run without ducking.
+ * 12. Clear: after an attack and the fade, the output is that of a fresh plugin fed from the
+ *     attack (the old tail is gone); no re-arming during the fade; a slow rise, or an attack
+ *     while frozen, does not clear (output identical to Clear off).
+ * 13. Link: dry and wet linked by the DSP; when linking, the dry level leads; automation of the
+ *     wet level alone then moves the dry one (output identical to both levels set by hand).
  */
 #include "src/DistrhoPluginInternal.hpp"
 #include "src/DistrhoPlugin.cpp"
@@ -50,7 +57,7 @@ static void check(const bool ok, const char* what)
 }
 
 struct Settings {
-    float values[kParamCount];   // by parameter index; those of kPresetParams are used
+    float values[kParamCount];   // by parameter index; those of the presets are used
     float freeze = 0.0f;
     float bypass = 0.0f;
 };
@@ -59,11 +66,12 @@ static Settings originalSettings(const float bw, const float tail, const float d
 {
     Settings s;
     for (int i = 0; i < kPresetParamCount; ++i)
-        s.values[kPresetParams[i]] = kTinplatePresets[1].values[i];   // "Original (CAPS)"
+        s.values[i] = kTinplatePresets[1].values[i];   // "Original (CAPS)"
     s.values[kParamBandwidth] = bw;
     s.values[kParamTail] = tail;
     s.values[kParamDamping] = damp;
-    s.values[kParamBlend] = blend;
+    s.values[kParamWet] = TinplateLaw::blendWetDb(blend);   // the mix of CAPS, as levels in dB
+    s.values[kParamDry] = TinplateLaw::blendDryDb(blend);
     return s;
 }
 
@@ -84,7 +92,7 @@ static void process(const Settings& s, const double sr, const std::vector<float>
     d_nextSampleRate = sr;
     PluginExporter p(nullptr, nullptr, nullptr, nullptr);
     for (int i = 0; i < kPresetParamCount; ++i)
-        p.setParameterValue(kPresetParams[i], s.values[kPresetParams[i]]);
+        p.setParameterValue(i, s.values[i]);
     p.setParameterValue(kParamFreeze, s.freeze);
     p.setParameterValue(kParamBypass, s.bypass);
     p.activate();
@@ -199,31 +207,47 @@ int main()
             { 0.65f, 0.75f, 0.25f, 0.6f },
         };
         const double rates[] = { 44100.0, 48000.0, 96000.0, 192000.0 };
-        double worst = 0.0;
-        int cases = 0;
+        double worst = 0.0, worstMix = 0.0;
+        int cases = 0, mixes = 0;
         for (const double sr : rates)
         {
             std::vector<float> L, R, oL, oR, cL, cR;
             testSignal(sr, sr > 100000.0 ? 1.1 : 2.1, L, R);
-            for (const auto& c : sets)
-            {
-                process(originalSettings(c[0], c[1], c[2], c[3]), sr, L, R, oL, oR);
-                processCaps(c, static_cast<unsigned long>(sr), L, R, cL, cR);
-                const double scale = std::max(1e-3f, std::max(peakOf(cL), peakOf(cR)));
-                double err = 0.0;
-                for (size_t i = 0; i < L.size(); ++i)
-                    err = std::max(err, std::max<double>(std::fabs(oL[i] - cL[i]), std::fabs(oR[i] - cR[i])) / scale);
-                worst = std::max(worst, err);
-                ++cases;
-            }
+            for (const auto& c0 : sets)
+                for (int pass = 0; pass < 2; ++pass)
+                {
+                    // pass 0: the blend of the set; pass 1: wet only (blend 1)
+                    const float c[4] = { c0[0], c0[1], c0[2], pass ? 1.0f : c0[3] };
+                    if (pass == 1 && c0[3] == 1.0f)
+                        continue;
+                    process(originalSettings(c[0], c[1], c[2], c[3]), sr, L, R, oL, oR);
+                    processCaps(c, static_cast<unsigned long>(sr), L, R, cL, cR);
+                    const double scale = std::max(1e-3f, std::max(peakOf(cL), peakOf(cR)));
+                    double err = 0.0;
+                    for (size_t i = 0; i < L.size(); ++i)
+                        err = std::max(err, std::max<double>(std::fabs(oL[i] - cL[i]), std::fabs(oR[i] - cR[i])) / scale);
+                    if (c[3] == 0.0f || c[3] == 1.0f)
+                    {
+                        worst = std::max(worst, err);
+                        ++cases;
+                    }
+                    else
+                    {
+                        worstMix = std::max(worstMix, err);
+                        ++mixes;
+                    }
+                }
         }
         char buf[160];
-        std::snprintf(buf, sizeof(buf), "%d cases (7 settings x 4 rates): max error / peak %.2e", cases, worst);
+        std::snprintf(buf, sizeof(buf), "%d cases wet only or dry only (7 settings, 4 rates): max error / peak %.2e",
+                      cases, worst);
 #ifdef __FAST_MATH__
         check(worst < 1e-5, buf);
 #else
         check(worst == 0.0, buf);
 #endif
+        std::snprintf(buf, sizeof(buf), "%d mixes, blend as dB levels: max error / peak %.2e", mixes, worstMix);
+        check(worstMix < 1e-5, buf);
     }
 
     const double sr = 44100.0;
@@ -389,7 +413,7 @@ int main()
         };
         // steady 220 Hz at 0.5: steps up to 0.5 x 2 pi 220 / 44100 = 0.016
         Settings s = originalSettings(0.8f, 0.6f, 0.4f, 0.0f);
-        process(s, sr, tone, tone, oL, oR, { { at, kParamBlend, 1.0f } });
+        process(s, sr, tone, tone, oL, oR, { { at, kParamWet, 0.0f }, { at, kParamDry, kLevelOff } });
         const float ours = maxStep(oL, at - 10, at + static_cast<size_t>(0.05 * sr));
         // the original: blend changed between two blocks
         std::vector<float> cL(tone.size()), cR(tone.size());
@@ -400,7 +424,8 @@ int main()
         capsPlateDelete(p);
         const float theirs = maxStep(cL, at - 10, at + static_cast<size_t>(0.05 * sr));
         char buf[128];
-        std::snprintf(buf, sizeof(buf), "blend 0 -> 1: largest step %.3f (original: %.3f)", ours, theirs);
+        std::snprintf(buf, sizeof(buf), "dry only -> wet only: largest step %.3f (original, blend 0 -> 1: %.3f)",
+                      ours, theirs);
         check(ours < 0.03f && theirs > 0.2f, buf);
 
         s = originalSettings(0.8f, 0.6f, 0.4f, 1.0f);
@@ -418,7 +443,7 @@ int main()
     {
         Settings s;
         for (int i = 0; i < kPresetParamCount; ++i)
-            s.values[kPresetParams[i]] = kTinplatePresets[k].values[i];
+            s.values[i] = kTinplatePresets[k].values[i];
         process(s, sr, L, R, oL, oR);
         bool finite = true;
         for (size_t i = 0; i < N; ++i)
@@ -443,6 +468,17 @@ int main()
                       outs[kParamMeterIn], outs[kParamMeterOut], outs[kParamMeterWet]);
         check(std::fabs(outs[kParamMeterIn] + 6.02f) < 0.05f && std::fabs(outs[kParamMeterOut] + 6.02f) < 0.05f
               && outs[kParamMeterWet] > -40.0f, buf);
+
+        // dry at -6 dB, reverb off: the input x 10^(-6/20)
+        s.values[kParamDry] = -6.0f;
+        s.values[kParamWet] = kLevelOff;
+        process(s, sr, tone, tone, oL, oR);
+        float err = 0.0f;
+        const float g = std::pow(10.0f, -0.3f);
+        for (size_t i = 0; i < tone.size(); ++i)
+            err = std::max(err, std::fabs(oL[i] - g * tone[i]));
+        std::snprintf(buf, sizeof(buf), "dry -6 dB, reverb off: output = input x %.4f (error %.1e)", g, err);
+        check(err < 1e-6f, buf);
 
         d_nextSampleRate = sr;
         PluginExporter p(nullptr, nullptr, nullptr, nullptr);
@@ -522,6 +558,117 @@ int main()
         for (size_t i = 0; i < n; ++i)
             same = same && oL[i] == rL[i] && oR[i] == rR[i];
         check(same, "depth 0: output identical to no ducking");
+    }
+
+    // 12. clear --------------------------------------------------------------------------------
+    std::printf("12. clear\n");
+    {
+        // noise burst 0.3 s, silence 0.6 s (the tail rings), then a 330 Hz tone from its peak
+        const size_t A = static_cast<size_t>(0.9 * sr), n = static_cast<size_t>(2.5 * sr);
+        std::mt19937 rng(3);
+        std::uniform_real_distribution<float> u(-0.5f, 0.5f);
+        std::vector<float> x(n, 0.0f);
+        for (size_t i = 0; i < static_cast<size_t>(0.3 * sr); ++i)
+            x[i] = u(rng);
+        const auto tone = [&](std::vector<float>& v, const size_t from, const size_t to) {
+            for (size_t i = from; i < to; ++i)
+                v[i] = 0.5f * static_cast<float>(std::cos(2.0 * M_PI * 330.0 * (i - from) / sr));
+        };
+        tone(x, A, A + static_cast<size_t>(0.4 * sr));
+        Settings s = originalSettings(0.8f, 0.8f, 0.3f, 1.0f);
+        s.values[kParamFade] = 60.0f;
+        const size_t settled = A + static_cast<size_t>(0.06 * sr);
+        // fresh plugin fed from the attack on
+        const std::vector<float> after(x.begin() + static_cast<long>(A), x.end());
+        std::vector<float> fL, fR;
+        process(s, sr, after, after, fL, fR);
+        const auto gap = [&](const std::vector<float>& yL, const std::vector<float>& yR, const size_t from) {
+            double d = 0.0, m = 0.0;
+            for (size_t i = from; i < n; ++i)
+            {
+                d = std::max(d, std::max<double>(std::fabs(yL[i] - fL[i - A]), std::fabs(yR[i] - fR[i - A])));
+                m = std::max(m, std::max<double>(std::fabs(fL[i - A]), std::fabs(fR[i - A])));
+            }
+            return d / m;
+        };
+        process(s, sr, x, x, rL, rR);   // clear off
+        s.values[kParamClear] = 1.0f;
+        float outs[kParamCount];
+        process(s, sr, x, x, oL, oR, {}, outs);
+        char buf[160];
+        std::snprintf(buf, sizeof(buf), "after the fade: gap to a fresh plate %.1e (clear off: %.2f), old tail gone",
+                      gap(oL, oR, settled), gap(rL, rR, settled));
+        check(gap(oL, oR, settled) < 1e-5 && gap(rL, rR, settled) > 0.05, buf);
+        bool same = true;
+        for (size_t i = 0; i < A; ++i)
+            same = same && oL[i] == rL[i] && oR[i] == rR[i];
+        check(same, "before the attack: identical to clear off");
+
+        // a second attack during a 200 ms fade: no re-arming, the new plate keeps both
+        std::vector<float> y = x;
+        std::fill(y.begin() + static_cast<long>(A + 0.02 * sr), y.end(), 0.0f);
+        tone(y, A + static_cast<size_t>(0.1 * sr), A + static_cast<size_t>(0.5 * sr));
+        s.values[kParamFade] = 200.0f;
+        const std::vector<float> after2(y.begin() + static_cast<long>(A), y.end());
+        process(s, sr, after2, after2, fL, fR);
+        process(s, sr, y, y, oL, oR);
+        std::snprintf(buf, sizeof(buf), "second attack 100 ms later, fade 200 ms: gap %.1e (not cleared again)",
+                      gap(oL, oR, A + static_cast<size_t>(0.2 * sr)));
+        check(gap(oL, oR, A + static_cast<size_t>(0.2 * sr)) < 1e-5, buf);
+
+        // slow rise (linear ramp of 500 ms: from Floor to Trigger in 100 ms): not an attack
+        std::vector<float> z = x;
+        tone(z, A, A + static_cast<size_t>(1.0 * sr));
+        for (size_t i = A; i < A + static_cast<size_t>(0.5 * sr); ++i)
+            z[i] *= static_cast<float>(i - A) / static_cast<float>(0.5 * sr);
+        s.values[kParamClear] = 0.0f;
+        process(s, sr, z, z, rL, rR);
+        s.values[kParamClear] = 1.0f;
+        process(s, sr, z, z, oL, oR);
+        same = true;
+        for (size_t i = 0; i < n; ++i)
+            same = same && oL[i] == rL[i] && oR[i] == rR[i];
+        check(same, "slow rise (500 ms ramp): no clearing, identical to clear off");
+        s.values[kParamWindow] = 200.0f;
+        process(s, sr, z, z, oL, oR);
+        same = true;
+        for (size_t i = 0; i < n; ++i)
+            same = same && oL[i] == rL[i] && oR[i] == rR[i];
+        check(!same, "same rise with Window 200 ms (Floor to Trigger in 100 ms): cleared");
+        s.values[kParamWindow] = 20.0f;
+
+        // frozen: the attack does not clear
+        const std::vector<Change> fr = { { static_cast<size_t>(0.35 * sr), kParamFreeze, 1.0f } };
+        s.values[kParamClear] = 0.0f;
+        process(s, sr, x, x, rL, rR, fr);
+        s.values[kParamClear] = 1.0f;
+        process(s, sr, x, x, oL, oR, fr);
+        same = true;
+        for (size_t i = 0; i < n; ++i)
+            same = same && oL[i] == rL[i] && oR[i] == rR[i];
+        check(same, "frozen: no clearing, identical to clear off");
+    }
+
+    // 13. link -----------------------------------------------------------------------------------
+    std::printf("13. link\n");
+    {
+        const size_t at = N / 2;
+        Settings s = originalSettings(0.8f, 0.6f, 0.4f, 1.0f);
+        s.values[kParamDry] = -6.0f;
+        s.values[kParamWet] = 6.0f;    // ignored: the dry level leads when linking
+        s.values[kParamLink] = 1.0f;
+        process(s, sr, L, R, oL, oR, { { at, kParamWet, -3.0f } });   // automation of the wet level only
+        Settings h = s;
+        h.values[kParamLink] = 0.0f;
+        h.values[kParamWet] = TinplateLaw::linkedDb(-6.0f);
+        process(h, sr, L, R, rL, rR, { { at, kParamWet, -3.0f }, { at, kParamDry, TinplateLaw::linkedDb(-3.0f) } });
+        bool same = true;
+        for (size_t i = 0; i < N; ++i)
+            same = same && oL[i] == rL[i] && oR[i] == rR[i];
+        char buf[160];
+        std::snprintf(buf, sizeof(buf), "dry -6 dB leads (reverb %.2f dB), then reverb -3 dB automated (dry %.2f dB)",
+                      TinplateLaw::linkedDb(-6.0f), TinplateLaw::linkedDb(-3.0f));
+        check(same, buf);
     }
 
     std::printf("%s\n", gFailures == 0 ? "all DSP tests passed" : "DSP TESTS FAILED");

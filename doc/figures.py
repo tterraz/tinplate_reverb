@@ -138,13 +138,15 @@ def fig_lois():
     ax1.legend(fontsize=7, loc="lower center", ncol=2)
     ax1.set_title("Passe-bas d'entrée et d'amortissement", fontsize=9)
 
-    ax2.plot(p, db(wet(p)), color=BRASS, label="traité : blend$^{1,53}$")
-    ax2.plot(p, db(1.0 - wet(p)), color=DARK, label="sec : 1 - blend$^{1,53}$")
-    ax2.set_xlabel("Blend")
-    ax2.set_ylabel("gain (dB)")
-    ax2.set_ylim(-40, 3)
-    ax2.legend(fontsize=7.5, loc="lower center")
-    ax2.set_title("Mélange sec / traité", fontsize=9)
+    # faders Dry and Reverb: piecewise linear law of the interface (plugin/TinplateUI.cpp)
+    law_db, law_pos = [-60, -40, -24, -12, 0, 6], [0, 0.15, 0.35, 0.55, 0.82, 1.0]
+    ax2.plot(p, np.interp(p, law_pos, law_db), color=BRASS)
+    ax2.set_xlabel("position du fader (0 en bas, 1 en haut)")
+    ax2.set_ylabel("niveau (dB)")
+    ax2.set_ylim(-62, 8)
+    ax2.set_yticks([-60, -40, -24, -12, 0, 6])
+    ax2.set_yticklabels(["off", "-40", "-24", "-12", "0", "+6"])
+    ax2.set_title("Faders Dry et Reverb", fontsize=9)
     save(fig, "fig_lois.pdf")
 
 

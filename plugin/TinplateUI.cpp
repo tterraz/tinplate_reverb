@@ -7,8 +7,9 @@
  * Everything is drawn in a logical 900 x 730 space, scaled to the window size (resizable,
  * aspect ratio kept).  Three sections, left to right in the order of the signal:
  *   1 INPUT (pre-delay, bandwidth) -> 2 PLATE (tail, damping, freeze, decay time)
- *   -> 3 OUTPUT (blend, width, low cut, output, meters),
- * below them the DUCKING band (duck, threshold, attack, release, cut meter),
+ *   -> 3 OUTPUT (width, low cut; faders DRY, REVERB, OUTPUT; meters),
+ * below them 4 DUCKING (duck, threshold, attack, release, cut meter) and 5 CLEAR (on / off,
+ * floor, trigger, fade, state),
  * and at the bottom the decay time (RT60) of the plate against frequency with the tone of the wet
  * signal (bandwidth and low cut).
  * Knobs: drag vertically (Shift = fine), mouse wheel, double-click or Ctrl+click = default,
@@ -97,26 +98,26 @@ static const Theme kThemes[TinplatePrefs::kThemeCount] = {
         Color(44, 56, 66),
         Color(8, 11, 14, 0.95f), Color(110, 190, 225, 0.6f), Color(232, 196, 120),
     },
-    {   // Tin
+    {   // Tin (light grey; panels and plot with a slight copper tint, not the window, knobs, buttons)
         Color(214, 219, 223), Color(230, 234, 237), Color(30, 110, 150, 0.07f), Color(242, 245, 247),
         Color(226, 231, 235), Color(30, 110, 150, 0.55f),
-        Color(249, 250, 251), Color(240, 243, 245), Color(190, 199, 206), Color(40, 55, 70, 0.16f),
-        Color(190, 199, 206, 0.8f),
+        Color(243, 236, 230), Color(235, 229, 225), Color(191, 191, 191), Color(40, 55, 70, 0.16f),
+        Color(191, 191, 191, 0.8f),
         Color(30, 38, 45), Color(95, 108, 118), Color(140, 150, 158), Color(250, 253, 255),
         Color(25, 110, 150), Color(150, 105, 25), Color(15, 70, 100), Color(25, 110, 150, 0.75f),
         Color(25, 110, 150, 0.22f),
         Color(40, 130, 170), Color(20, 90, 125), Color(250, 251, 252), Color(230, 234, 237),
         Color(25, 110, 150, 0.9f),
         Color(40, 160, 210, 0.55f), Color(40, 160, 210, 0.0f), Color(20, 140, 200), Color(190, 198, 205),
-        Color(232, 236, 239), Color(250, 251, 252), Color(212, 218, 223), Color(25, 110, 150, 0.7f),
+        Color(232, 236, 239), Color(244, 236, 231), Color(212, 218, 223), Color(25, 110, 150, 0.7f),
         Color(40, 130, 170), Color(20, 90, 125),
         Color(40, 55, 70, 0.30f), Color(253, 254, 255), Color(212, 218, 223), Color(248, 250, 251),
         Color(222, 227, 231),
         Color(90, 105, 118, 0.45f), Color(25, 110, 150, 0.12f), Color(25, 110, 150, 0.22f), Color(25, 110, 150, 0.18f),
         Color(20, 90, 125),
         Color(140, 155, 165, 0.35f), Color(110, 125, 135, 0.7f), Color(150, 105, 25, 0.15f), Color(25, 110, 150),
-        Color(185, 195, 202),
-        Color(253, 254, 255, 0.97f), Color(25, 110, 150, 0.6f), Color(255, 236, 200),
+        Color(187, 187, 187),
+        Color(247, 239, 234, 0.97f), Color(25, 110, 150, 0.6f), Color(255, 236, 200),
     },
 };
 
@@ -137,12 +138,15 @@ struct Rect {
 static const Rect kSecIn   = { 20, 70, 220, 380 };
 static const Rect kSecTank = { 250, 70, 370, 380 };
 static const Rect kSecOut  = { 630, 70, 250, 380 };
-static const Rect kSecDuck = { 20, 460, 860, 122 };
+static const Rect kSecDuck = { 20, 460, 425, 122 };
+static const Rect kSecClear = { 455, 460, 425, 122 };
 static const Rect kDecay   = { 20, 592, 860, 128 };
 static const Rect kPlot    = { 150, 600, 680, 104 };   // decay time against frequency
 
-enum { kKnobPredelay = 0, kKnobBandwidth, kKnobTail, kKnobDamping, kKnobBlend, kKnobWidth, kKnobLowCut,
-       kKnobOutput, kKnobDuck, kKnobThreshold, kKnobAttack, kKnobRelease, kNumKnobs };
+// knobs and faders (a fader: cx, cy = centre of its track, r = half its length)
+enum { kKnobPredelay = 0, kKnobBandwidth, kKnobTail, kKnobDamping, kKnobWet, kKnobWidth, kKnobLowCut,
+       kKnobOutput, kKnobDuck, kKnobThreshold, kKnobAttack, kKnobRelease, kKnobFloor, kKnobTrigger, kKnobFade,
+       kKnobWindow, kKnobDry, kNumKnobs };
 
 struct KnobDef {
     int param;
@@ -164,27 +168,41 @@ static const KnobDef kKnobs[kNumKnobs] = {
     { kParamDamping,   510.0f, 165.0f, 50.0f, "DAMPING",
       "Low-pass inside the loop (control of the original): the highs die sooner than the lows. "
       "Shown: its -3 dB frequency at this sample rate." },
-    { kParamBlend,     692.0f, 152.0f, 26.0f, "BLEND",
-      "Dry / wet (control of the original): wet = blend^1.53, dry = 1 - wet. "
-      "At 1: reverb only (for a send)." },
-    { kParamWidth,     818.0f, 152.0f, 26.0f, "WIDTH",
+    { kParamWet,       797.0f, 215.0f, 95.0f, "REVERB",
+      "Level of the reverb alone, dB (at the bottom: off). Reverb at 0 dB and Dry off: reverb only "
+      "(for a send)." },
+    { kParamWidth,     675.0f, 160.0f, 24.0f, "WIDTH",
       "Stereo width of the reverb: 0 % mono, 100 % as the plate gives it, 200 % side doubled." },
-    { kParamLowCut,    692.0f, 278.0f, 26.0f, "LOW CUT",
+    { kParamLowCut,    675.0f, 288.0f, 24.0f, "LOW CUT",
       "High-pass on the reverb only (12 dB / octave): keeps the low end of the mix clear. "
       "At the minimum: off." },
-    { kParamOutput,    818.0f, 278.0f, 26.0f, "OUTPUT",
+    { kParamOutput,    849.0f, 215.0f, 95.0f, "OUTPUT",
       "Gain of the whole output, dry and wet." },
-    { kParamDuck,      380.0f, 520.0f, 24.0f, "DUCK",
+    { kParamDuck,       85.0f, 520.0f, 22.0f, "DUCK",
       "Ducking: the reverb is lowered while the input plays and comes back in the gaps "
       "(clearer vocals). Largest cut of the reverb, dB. At 0: off." },
-    { kParamThreshold, 500.0f, 520.0f, 24.0f, "THRESHOLD",
+    { kParamThreshold, 185.0f, 520.0f, 22.0f, "THRESHOLD",
       "Input peak level where the ducking starts: the reverb is cut by as many dB as the input "
       "goes over it, at most the Duck depth." },
-    { kParamAttack,    620.0f, 520.0f, 24.0f, "ATTACK",
+    { kParamAttack,    285.0f, 520.0f, 22.0f, "ATTACK",
       "How fast the reverb goes down when the input comes in." },
-    { kParamRelease,   740.0f, 520.0f, 24.0f, "RELEASE",
+    { kParamRelease,   385.0f, 520.0f, 22.0f, "RELEASE",
       "How fast the reverb comes back when the input stops: short, it swells in every gap; "
       "long, it comes back at the end of the phrase." },
+    { kParamFloor,     600.0f, 520.0f, 20.0f, "FLOOR",
+      "Clear: the detection is armed while the input stays under this peak level (and the "
+      "previous clearing has ended)." },
+    { kParamTrigger,   680.0f, 520.0f, 20.0f, "TRIGGER",
+      "Clear: an armed input that goes over this level within the Window is a new attack, and "
+      "empties the plate." },
+    { kParamFade,      760.0f, 520.0f, 20.0f, "FADE",
+      "Clear: how fast the old reverb fades out at a new attack (the new sound goes into an "
+      "empty plate at once)." },
+    { kParamWindow,    838.0f, 520.0f, 20.0f, "WINDOW",
+      "Clear: longest time for the input to go from Floor to Trigger to count as an attack. "
+      "Short: only sharp attacks (drums, plucks); long: softer ones too." },
+    { kParamDry,       745.0f, 215.0f, 95.0f, "DRY",
+      "Level of the dry signal, dB (at the bottom: off). Not delayed: no latency." },
 };
 
 static const Rect kFreeze  = { 380, 318, 110, 30 };
@@ -210,12 +228,15 @@ static const Rect kBypass  = { 768, 14, 108, 30 };
 // meters: three horizontal bars in the output section
 static const float kMeterX = 690.0f, kMeterW = 132.0f, kMeterH = 9.0f;
 static const float kMeterY[3] = { 384.0f, 404.0f, 424.0f };   // IN, REVERB, OUT
-static const Rect kDuckMeter = { 88, 520, 160, 9 };              // cut of the reverb by the ducking
+static const Rect kDuckMeter = { 272, 473, 110, 8 };             // cut of the reverb by the ducking
+static const Rect kClearBtn  = { 470, 498, 84, 30 };              // clear on / off
+static const Rect kLink      = { 760, 92, 22, 18 };               // chain: dry and reverb faders linked
+static const Rect kClearState = { 470, 540, 84, 30 };             // off, waiting, armed, cleared
 
 // hover zones with a tooltip (knobs are handled separately)
 enum {
     kZoneFreeze = 0, kZoneRt, kZonePlot, kZonePreset, kZoneBypass, kZoneTheme, kZoneAB, kZoneCopy,
-    kZoneIn, kZoneWet, kZoneOut, kZoneDuckMeter, kNumZones
+    kZoneIn, kZoneWet, kZoneOut, kZoneDuckMeter, kZoneClear, kZoneClearState, kZoneLink, kNumZones
 };
 
 struct Zone {
@@ -248,13 +269,30 @@ static const Zone kZones[kNumZones] = {
       "Copies the current settings into the other set (A > B or B > A)." },
     { { kMeterX - 46, kMeterY[0] - 7, kMeterW + 100, 16 }, "IN", "Input peak level, dBFS." },
     { { kMeterX - 46, kMeterY[1] - 7, kMeterW + 100, 16 }, "REVERB",
-      "Peak level of the reverb alone (after low cut and width, before the blend), dBFS." },
+      "Peak level of the reverb alone (after low cut, width and ducking, before the Reverb fader), "
+      "dBFS." },
     { { kMeterX - 46, kMeterY[2] - 7, kMeterW + 100, 16 }, "OUT", "Output peak level, dBFS." },
-    { { kDuckMeter.x - 50, kDuckMeter.y - 8, kDuckMeter.w + 96, 25 }, "CUT",
+    { { kDuckMeter.x - 36, kDuckMeter.y - 7, kDuckMeter.w + 76, 22 }, "CUT",
       "Cut of the reverb by the ducking now, dB (0 to 30)." },
+    { kClearBtn, "CLEAR",
+      "A new attack empties the plate: the old reverb fades out and the new sound starts in a "
+      "clean plate. Attack: the input rises from under Floor to over Trigger within the Window. "
+      "Not while frozen." },
+    { kClearState, "CLEAR STATE",
+      "WAITING: the input is not under Floor yet, or the old reverb is still fading. "
+      "ARMED: the next attack will clear. CLEARED: lit 0.2 s at each clearing." },
+    { kLink, "LINK",
+      "Links the Dry and Reverb faders as the Blend of the original: raising one lowers the "
+      "other (their gains add up to 1, both at most 0 dB). When linking, the Dry fader sets the "
+      "mix. Host automation follows the link too: the fader moved last leads." },
 };
 
 static const int kHoverZoneBase = 100;
+
+// position of the dry and wet faders: piecewise linear in dB, off at the bottom
+static const int kLawPoints = 6;
+static const float kLawDb[kLawPoints] = { -60.0f, -40.0f, -24.0f, -12.0f, 0.0f, 6.0f };
+static const float kLawPos[kLawPoints] = { 0.0f, 0.15f, 0.35f, 0.55f, 0.82f, 1.0f };
 
 // ------------------------------------------------------------------------------------------------
 
@@ -285,6 +323,7 @@ public:
         fValues[kParamMeterWet] = -17.0f;
         fValues[kParamMeterOut] = -8.2f;
         fValues[kParamMeterDuck] = 7.5f;
+        fValues[kParamMeterClear] = 1.0f;
 #endif
     }
 
@@ -300,6 +339,15 @@ protected:
             return;   // keep the meters of the screenshot
 #endif
         fValues[index] = value;
+        // linked (by the host too): the other level as the DSP computes it
+        if (index == kParamDry || index == kParamWet)
+        {
+            const int q = partnerOf(static_cast<int>(index));
+            if (q >= 0)
+                fValues[q] = TinplateLaw::linkedDb(value);
+        }
+        else if (index == kParamLink && linked())
+            fValues[kParamWet] = TinplateLaw::linkedDb(fValues[kParamDry]);
         if (index < static_cast<uint32_t>(kParamFirstOutput))
             repaint();
         else
@@ -321,7 +369,7 @@ protected:
             fPresetUser = false;
             fPresetName = kTinplatePresets[index].name;
             for (int i = 0; i < kPresetParamCount; ++i)
-                fValues[kPresetParams[i]] = fPresetValues[i] = kTinplatePresets[index].values[i];
+                fValues[i] = fPresetValues[i] = kTinplatePresets[index].values[i];
             repaint();
         }
     }
@@ -340,6 +388,20 @@ protected:
         {
             fDemoFreezeDone = true;
             setOnce(kParamFreeze, 1.0f);
+        }
+#endif
+#ifdef TINPLATE_UI_DEMO_CLEAR
+        if (!fDemoClearDone)
+        {
+            fDemoClearDone = true;
+            setOnce(kParamClear, 1.0f);
+        }
+#endif
+#ifdef TINPLATE_UI_DEMO_LINK
+        if (!fDemoLinkDone)
+        {
+            fDemoLinkDone = true;
+            toggleLink();
         }
 #endif
 #ifdef TINPLATE_UI_DEMO_MENU
@@ -387,6 +449,7 @@ protected:
         drawTankSection();
         drawOutputSection();
         drawDuckSection();
+        drawClearSection();
         drawDecayPlot();
         if (fMenuOpen)
             drawPresetMenu();
@@ -411,6 +474,8 @@ protected:
             if (ev.button == kMouseButtonLeft && fDrag >= 0)
             {
                 editParameter(kKnobs[fDrag].param, false);
+                if (fDragPartner >= 0)
+                    editParameter(fDragPartner, false);
                 fDrag = -1;
                 repaint();
                 return true;
@@ -452,6 +517,8 @@ protected:
         if (kBypass.contains(x, y)) { toggle(kParamBypass); return true; }
         if (kTheme.contains(x, y)) { setTheme(static_cast<int>(segmentAt(kTheme, x, TinplatePrefs::kThemeCount))); return true; }
         if (kFreeze.contains(x, y)) { toggle(kParamFreeze); return true; }
+        if (kClearBtn.contains(x, y)) { toggle(kParamClear); return true; }
+        if (kLink.contains(x, y)) { toggleLink(); return true; }
 
         if (k < 0)
             return false;
@@ -471,6 +538,9 @@ protected:
         fDrag = k;
         fLastY = y;
         editParameter(p, true);
+        fDragPartner = partnerOf(p);
+        if (fDragPartner >= 0)
+            editParameter(fDragPartner, true);
         repaint();
         return true;
     }
@@ -501,7 +571,9 @@ protected:
         if (fDrag >= 0)
         {
             const int p = kKnobs[fDrag].param;
-            const float pixels = (ev.mod & kModifierShift) ? 900.0f : 220.0f;
+            float pixels = (ev.mod & kModifierShift) ? 900.0f : 220.0f;
+            if (isFader(p))
+                pixels = 2.0f * kKnobs[fDrag].r * ((ev.mod & kModifierShift) ? 4.0f : 1.0f);   // follows the mouse
             const float norm = toNorm(p, fValues[p]) + (fLastY - y) / pixels;
             fLastY = y;
             changeValue(p, fromNorm(p, norm));
@@ -650,13 +722,37 @@ private:
 
     static bool logarithmic(const int p)
     {
-        return p == kParamLowCut || p == kParamAttack || p == kParamRelease;
+        return p == kParamLowCut || p == kParamAttack || p == kParamRelease || p == kParamFade
+            || p == kParamWindow;
+    }
+
+    static bool isFader(const int p) { return p == kParamWet || p == kParamDry || p == kParamOutput; }
+
+    // position of the dry and wet faders: piecewise linear in dB (kLawDb, kLawPos)
+    static float levelToNorm(const float db)
+    {
+        if (db <= kLawDb[0])
+            return 0.0f;
+        for (int i = 1; i < kLawPoints; ++i)
+            if (db <= kLawDb[i])
+                return kLawPos[i - 1] + (kLawPos[i] - kLawPos[i - 1]) * (db - kLawDb[i - 1]) / (kLawDb[i] - kLawDb[i - 1]);
+        return 1.0f;
+    }
+
+    static float normToLevel(const float n)
+    {
+        for (int i = 1; i < kLawPoints; ++i)
+            if (n <= kLawPos[i])
+                return kLawDb[i - 1] + (kLawDb[i] - kLawDb[i - 1]) * (n - kLawPos[i - 1]) / (kLawPos[i] - kLawPos[i - 1]);
+        return kLawDb[kLawPoints - 1];
     }
 
     // knob position: low cut, attack and release logarithmic, the others linear
     static float toNorm(const int p, const float v)
     {
         const TinplateRange& r = kTinplateRanges[p];
+        if (p == kParamWet || p == kParamDry)
+            return levelToNorm(v);
         if (logarithmic(p))
             return std::log(std::fmax(v, r.min) / r.min) / std::log(r.max / r.min);
         return (v - r.min) / (r.max - r.min);
@@ -666,6 +762,8 @@ private:
     {
         const TinplateRange& r = kTinplateRanges[p];
         n = std::fmin(std::fmax(n, 0.0f), 1.0f);
+        if (p == kParamWet || p == kParamDry)
+            return normToLevel(n);
         if (logarithmic(p))
             return r.min * std::pow(r.max / r.min, n);
         return r.min + n * (r.max - r.min);
@@ -683,8 +781,30 @@ private:
         return static_cast<float>(i < 0 ? 0 : i >= count ? count - 1 : i);
     }
 
-    void changeValue(const int p, const float v)
+    bool linked() const { return fValues[kParamLink] > 0.5f; }
+
+    // the other of the linked dry and reverb faders, or -1
+    int partnerOf(const int p) const
     {
+        if (!linked() || fLoading)
+            return -1;
+        return p == kParamDry ? kParamWet : p == kParamWet ? kParamDry : -1;
+    }
+
+    void changeValue(const int p, float v)
+    {
+        const int q = partnerOf(p);
+        if (q >= 0)
+        {
+            // linked, as the blend of the original: gains of dry and reverb add up to 1
+            v = std::fmin(v, 0.0f);
+            const float w = TinplateLaw::linkedDb(v);
+            if (fValues[q] != w)
+            {
+                fValues[q] = w;
+                setParameterValue(q, w);
+            }
+        }
         if (fValues[p] == v)
             return;
         fValues[p] = v;
@@ -692,12 +812,27 @@ private:
         repaint();
     }
 
-    // one complete edit gesture
+    // one complete edit gesture (both faders when they are linked)
     void setOnce(const int p, const float v)
     {
+        const int q = partnerOf(p);
         editParameter(p, true);
+        if (q >= 0)
+            editParameter(q, true);
         changeValue(p, v);
         editParameter(p, false);
+        if (q >= 0)
+            editParameter(q, false);
+    }
+
+    // link or unlink the dry and reverb faders (parameter Link, applied by the DSP); when
+    // linking, the dry fader sets the mix
+    void toggleLink()
+    {
+        toggle(kParamLink);
+        if (linked())
+            setOnce(kParamDry, fValues[kParamDry]);
+        repaint();
     }
 
     void toggle(const int p) { setOnce(p, fValues[p] > 0.5f ? 0.0f : 1.0f); }
@@ -722,7 +857,7 @@ private:
         Slot& s = fSlots[slot];
         for (int i = 0; i < kPresetParamCount; ++i)
         {
-            s.values[i] = fValues[kPresetParams[i]];
+            s.values[i] = fValues[i];
             s.presetValues[i] = fPresetValues[i];
         }
         s.preset = fPreset;
@@ -762,7 +897,7 @@ private:
         const Slot& other = fSlots[1 - fSlot];
         std::string text = "slot=" + std::to_string(fSlot) + ";other=";
         for (int i = 0; i < kPresetParamCount; ++i)
-            text += (i ? "," : "") + TinplateUserPresets::number(other.set ? other.values[i] : fValues[kPresetParams[i]]);
+            text += (i ? "," : "") + TinplateUserPresets::number(other.set ? other.values[i] : fValues[i]);
         setState(kStateKeys[kStateAB], text.c_str());
     }
 
@@ -774,26 +909,15 @@ private:
             return;
         std::istringstream in(other + 6);
         in.imbue(std::locale::classic());
-        // 1.0.0 wrote the first kPresetParamCountV1 values only: the others take their default
         float values[kPresetParamCount];
         for (int i = 0; i < kPresetParamCount; ++i)
-            values[i] = defaultValue(kPresetParams[i]);
-        int count = 0;
-        while (count < kPresetParamCount)
         {
             float v = 0.0f;
-            if (!(in >> v) || !std::isfinite(v))
+            char comma = ',';
+            if (!(in >> v) || !std::isfinite(v) || (i + 1 < kPresetParamCount && !(in >> comma)) || comma != ',')
                 return;
-            values[count] = clampValue(kPresetParams[count], v);
-            ++count;
-            char comma = 0;
-            if (!(in >> comma))
-                break;
-            if (comma != ',')
-                return;
+            values[i] = clampValue(i, v);
         }
-        if (count < kPresetParamCountV1)
-            return;
         fSlot = slot[5] - '0';
         Slot& s = fSlots[1 - fSlot];
         for (int i = 0; i < kPresetParamCount; ++i)
@@ -808,11 +932,13 @@ private:
     // loads a set of values: one edit gesture per parameter, remembered to show the "*"
     void loadValues(const float values[kPresetParamCount])
     {
+        fLoading = true;   // the values are taken as they are, link or not
         for (int i = 0; i < kPresetParamCount; ++i)
         {
-            setOnce(kPresetParams[i], values[i]);
+            setOnce(i, values[i]);
             fPresetValues[i] = values[i];
         }
+        fLoading = false;
         repaint();
     }
 
@@ -1003,7 +1129,7 @@ private:
             return;   // the hint says why
         float values[kPresetParamCount];
         for (int i = 0; i < kPresetParamCount; ++i)
-            values[i] = fValues[kPresetParams[i]];
+            values[i] = fValues[i];
         if (!TinplateUserPresets::save(name, values))
         {
             fNameError = true;
@@ -1042,7 +1168,7 @@ private:
     bool presetModified() const
     {
         for (int i = 0; i < kPresetParamCount; ++i)
-            if (std::fabs(fValues[kPresetParams[i]] - fPresetValues[i]) > 1e-4f)
+            if (std::fabs(fValues[i] - fPresetValues[i]) > 1e-4f)
                 return true;
         return false;
     }
@@ -1069,7 +1195,14 @@ private:
     {
         for (int i = 0; i < kNumKnobs; ++i)
         {
-            const float dx = x - kKnobs[i].cx, dy = y - kKnobs[i].cy, r = kKnobs[i].r + 8.0f;
+            const float dx = x - kKnobs[i].cx, dy = y - kKnobs[i].cy;
+            if (isFader(kKnobs[i].param))
+            {
+                if (std::fabs(dx) <= 16.0f && std::fabs(dy) <= kKnobs[i].r + 10.0f)
+                    return i;
+                continue;
+            }
+            const float r = kKnobs[i].r + 8.0f;
             if (dx * dx + dy * dy <= r * r)
                 return i;
         }
@@ -1081,10 +1214,11 @@ private:
     {
         const float v = fValues[p];
         const char* fmt = "%.1f";
-        if (p <= kParamBlend)
+        if (p <= kParamDamping)
             fmt = "%.3f";
         else if (p == kParamPredelay || p == kParamLowCut || p == kParamWidth || p == kParamThreshold
-                 || p == kParamRelease)
+                 || p == kParamRelease || p == kParamFloor || p == kParamTrigger || p == kParamFade
+                 || p == kParamWindow)
             fmt = "%.0f";
         std::snprintf(buf, size, fmt, v);
     }
@@ -1128,15 +1262,13 @@ private:
             std::snprintf(buf, size, detail ? "%.3f (RT60 %.2f s at 500 Hz)" : "%.2f  |  %.1f s", v,
                           TinplateRt60::seconds(v, fValues[kParamDamping], 500.0, sampleRate()));
             break;
-        case kParamBlend:
-        {
-            const float wet = TinplateLaw::wet(v), dry = 1.0f - wet;
-            if (detail)
-                std::snprintf(buf, size, "%.3f (wet %s, dry %s)", v, dbText(wet).c_str(), dbText(dry).c_str());
+        case kParamWet:
+        case kParamDry:
+            if (v <= kLevelOff + 0.05f)
+                std::snprintf(buf, size, "off");
             else
-                std::snprintf(buf, size, "%.2f", v);
+                std::snprintf(buf, size, "%+.1f dB", v);
             break;
-        }
         case kParamPredelay: std::snprintf(buf, size, "%.0f ms", v); break;
         case kParamLowCut:
             if (v <= kLowCutOff + 0.05f)
@@ -1152,7 +1284,11 @@ private:
             else
                 std::snprintf(buf, size, detail ? "%.1f dB (largest cut of the reverb)" : "%.1f dB", v);
             break;
-        case kParamThreshold: std::snprintf(buf, size, "%.0f dBFS", v); break;
+        case kParamThreshold:
+        case kParamFloor:
+        case kParamTrigger:   std::snprintf(buf, size, "%.0f dBFS", v); break;
+        case kParamFade:      std::snprintf(buf, size, "%.0f ms", v); break;
+        case kParamWindow:    std::snprintf(buf, size, v < 9.95f ? "%.1f ms" : "%.0f ms", v); break;
         case kParamAttack:    std::snprintf(buf, size, v < 9.95f ? "%.1f ms" : "%.0f ms", v); break;
         case kParamRelease:
             if (v >= 999.5f)
@@ -1318,6 +1454,8 @@ private:
         panel(kSecIn);
         panel(kSecTank);
         panel(kSecOut);
+        panel(kSecDuck);
+        panel(kSecClear);
         panel(kDecay);
         flowArrow(kSecIn.x + kSecIn.w + 5, kSecIn.y + kSecIn.h * 0.5f);
         flowArrow(kSecTank.x + kSecTank.w + 5, kSecTank.y + kSecTank.h * 0.5f);
@@ -1436,10 +1574,21 @@ private:
     void drawOutputSection()
     {
         sectionTitle(kSecOut, "3", "OUTPUT", "mix and level");
-        drawKnob(kKnobBlend);
         drawKnob(kKnobWidth);
         drawKnob(kKnobLowCut);
+        // scale of the dry and reverb faders, between them and the knobs
+        const KnobDef& f = kKnobs[kKnobDry];
+        const float marks[] = { 6.0f, 0.0f, -12.0f, -24.0f, -40.0f, -60.0f };
+        for (const float db : marks)
+        {
+            char b[8];
+            std::snprintf(b, sizeof(b), db <= kLevelOff ? "-inf" : db > 0.0f ? "+%.0f" : "%.0f", db);
+            label(f.cx - 15, f.cy + f.r - 2.0f * f.r * levelToNorm(db), 7.5f, fT->faint, ALIGN_RIGHT | ALIGN_MIDDLE, b);
+        }
+        drawKnob(kKnobDry);
+        drawKnob(kKnobWet);
         drawKnob(kKnobOutput);
+        drawLink();
         divider(kSecOut.x + 12, kSecOut.x + kSecOut.w - 12, 360);
         drawMeters();
     }
@@ -1447,7 +1596,7 @@ private:
     void drawDuckSection()
     {
         const bool off = fValues[kParamDuck] < 0.05f;
-        sectionTitle(kSecDuck, "4", "DUCKING", "the reverb steps back while the input plays");
+        sectionTitle(kSecDuck, "4", "DUCKING", "");
         drawKnob(kKnobDuck);
         if (off)
             globalAlpha(0.35f);   // no effect while the depth is 0
@@ -1484,20 +1633,155 @@ private:
         }
         strokeColor(fT->grid);
         stroke();
-        const char* const ticks[] = { "0", "10", "20", "30 dB" };
-        for (int j = 0; j < 4; ++j)
-            label(m.x + 1.5f + (m.w - 3.0f) * j / 3.0f, m.y + m.h + 9, 8, fT->faint,
-                  j == 0 ? ALIGN_LEFT | ALIGN_MIDDLE : j == 3 ? ALIGN_RIGHT | ALIGN_MIDDLE : ALIGN_CENTER | ALIGN_MIDDLE,
-                  ticks[j]);
         char b[16];
         std::snprintf(b, sizeof(b), fValues[kParamMeterDuck] < 0.05f ? "0.0" : "-%.1f", fValues[kParamMeterDuck]);
         label(m.x + m.w + 8, cy, 9.5f, fT->dim, ALIGN_LEFT | ALIGN_MIDDLE, b);
+    }
+
+    void drawClearSection()
+    {
+        const bool on = fValues[kParamClear] > 0.5f;
+        sectionTitle(kSecClear, "5", "CLEAR", "a new attack empties the plate");
+        button(kClearBtn, on, nullptr);
+        led(kClearBtn.x + 16, kClearBtn.y + kClearBtn.h * 0.5f, on);
+        label(kClearBtn.x + kClearBtn.w * 0.5f + 9, kClearBtn.y + kClearBtn.h * 0.5f, 11, on ? fT->onAccent : fT->dim,
+              ALIGN_CENTER | ALIGN_MIDDLE, "CLEAR", 2);
+
+        const int state = static_cast<int>(fValues[kParamMeterClear] + 0.5f);
+        const char* text = !on ? "off" : state == 2 ? "CLEARED" : state == 1 ? "ARMED" : "waiting";
+        const Color c = !on ? fT->faint : state == 2 ? fT->hot : state == 1 ? fT->gold : fT->dim;
+        label(kClearState.x + kClearState.w * 0.5f, kClearState.y + kClearState.h * 0.5f, 10.5f, c,
+              ALIGN_CENTER | ALIGN_MIDDLE, text, 1.5f);
+
+        if (!on)
+            globalAlpha(0.35f);   // no effect while clear is off
+        drawKnob(kKnobFloor);
+        drawKnob(kKnobTrigger);
+        drawKnob(kKnobFade);
+        drawKnob(kKnobWindow);
+        globalAlpha(1.0f);
+    }
+
+    // chain between the dry and reverb faders: whole when linked, broken when not
+    void drawLink()
+    {
+        const float cx = kLink.x + kLink.w * 0.5f, cy = kLink.y + kLink.h * 0.5f;
+        const bool hover = fHover == hoverOf(kLink);
+        strokeWidth(1.6f);
+        strokeColor(linked() ? fT->gold : hover ? fT->text : fT->dim);
+        beginPath();
+        if (linked())
+        {
+            roundedRect(cx - 9.5f, cy - 3.5f, 11.0f, 7.0f, 3.5f);
+            roundedRect(cx - 1.5f, cy - 3.5f, 11.0f, 7.0f, 3.5f);
+        }
+        else
+        {
+            roundedRect(cx - 11.0f, cy - 3.5f, 9.0f, 7.0f, 3.5f);
+            roundedRect(cx + 2.0f, cy - 3.5f, 9.0f, 7.0f, 3.5f);
+            moveTo(cx - 1.0f, cy - 5.0f);
+            lineTo(cx - 0.2f, cy - 8.0f);
+            moveTo(cx + 1.0f, cy + 5.0f);
+            lineTo(cx + 0.2f, cy + 8.0f);
+        }
+        stroke();
+    }
+
+    // vertical fader: track, fill from the bottom to the cap, ticks, label and value below
+    void drawFader(const int i)
+    {
+        const KnobDef& k = kKnobs[i];
+        const int p = k.param;
+        const bool active = i == fHover || i == fDrag || i == fEdit;
+        const float n = toNorm(p, fValues[p]);
+        const float top = k.cy - k.r, bottom = k.cy + k.r, y = bottom - 2.0f * k.r * n;
+
+        beginPath();
+        roundedRect(k.cx - 3.0f, top - 3.0f, 6.0f, 2.0f * k.r + 6.0f, 3.0f);
+        fillColor(fT->deepWell);
+        fill();
+        if (n > 0.001f)
+        {
+            beginPath();
+            roundedRect(k.cx - 3.0f, y, 6.0f, bottom + 3.0f - y, 3.0f);
+            fillPaint(linearGradient(0, bottom, 0, top, fT->deep, active ? fT->gold : fT->hot));
+            fill();
+        }
+        // ticks: 0 dB and the marks of the scale
+        beginPath();
+        if (p == kParamOutput)
+        {
+            for (float db = -24.0f; db <= 12.0f; db += 12.0f)
+            {
+                const float ty = bottom - 2.0f * k.r * toNorm(p, db);
+                moveTo(k.cx + 8.0f, ty + 0.5f);
+                lineTo(k.cx + (db == 0.0f ? 15.0f : 12.0f), ty + 0.5f);
+            }
+        }
+        else
+        {
+            const float marks[] = { 6.0f, 0.0f, -12.0f, -24.0f, -40.0f };
+            for (const float db : marks)
+            {
+                const float ty = bottom - 2.0f * k.r * levelToNorm(db);
+                moveTo(k.cx - 12.0f, ty + 0.5f);
+                lineTo(k.cx - (db == 0.0f ? 7.0f : 9.0f), ty + 0.5f);
+            }
+        }
+        strokeWidth(1.0f);
+        strokeColor(fT->grid);
+        stroke();
+
+        // cap
+        beginPath();
+        roundedRect(k.cx - 13.0f, y - 6.0f + 2.0f, 26.0f, 12.0f, 3.0f);
+        fillColor(fT->knobShadow);
+        fill();
+        beginPath();
+        roundedRect(k.cx - 13.0f, y - 6.0f, 26.0f, 12.0f, 3.0f);
+        fillPaint(linearGradient(0, y - 6.0f, 0, y + 6.0f, fT->knob0, fT->knob1));
+        fill();
+        strokeWidth(1.0f);
+        strokeColor(fT->knobEdge);
+        stroke();
+        beginPath();
+        moveTo(k.cx - 9.0f, y + 0.5f);
+        lineTo(k.cx + 9.0f, y + 0.5f);
+        strokeWidth(1.6f);
+        strokeColor(active ? fT->gold : fT->pointer);
+        stroke();
+
+        char buf[48];
+        valueText(p, buf, sizeof(buf), false);
+        label(k.cx, bottom + 19.0f, 9.5f, fT->text, ALIGN_CENTER | ALIGN_MIDDLE, k.label, 1.0f);
+        const float vy = bottom + 33.0f;
+        if (i == fEdit)
+        {
+            const float bw = 46.0f, bx = k.cx - bw * 0.5f;
+            beginPath();
+            roundedRect(bx, vy - 9, bw, 18, 4);
+            fillColor(fT->deepWell);
+            fill();
+            strokeWidth(1.0f);
+            strokeColor(fT->gold);
+            stroke();
+            char e[40];
+            std::snprintf(e, sizeof(e), "%s_", fEditText);
+            label(k.cx, vy, 10.5f, fT->gold, ALIGN_CENTER | ALIGN_MIDDLE, e);
+        }
+        else
+            label(k.cx, vy, 9.5f, active ? fT->gold : fT->dim, ALIGN_CENTER | ALIGN_MIDDLE, buf);
     }
 
     void drawKnob(const int i)
     {
         const KnobDef& k = kKnobs[i];
         const int p = k.param;
+        if (isFader(p))
+        {
+            drawFader(i);
+            return;
+        }
         const bool active = i == fHover || i == fDrag || i == fEdit;
         const float n = toNorm(p, fValues[p]);
         const float a = kArcStart + n * kArcSweep;
@@ -1942,7 +2226,10 @@ private:
             std::snprintf(title, sizeof(title), "%s  %s", d.label, v);
             help = d.help;
             const float r = d.r + 10;
-            anchor = { d.cx - r, d.cy - r, 2 * r, 2 * r };
+            if (isFader(d.param))
+                anchor = { d.cx - 20, d.cy - r, 40, 2 * r + 30 };
+            else
+                anchor = { d.cx - r, d.cy - r, 2 * r, 2 * r };
         }
         else
         {
@@ -2016,6 +2303,8 @@ private:
     };
     Slot fSlots[2];
     int fSlot = 0;
+    bool fLoading = false;      // loadValues: no linking
+    int fDragPartner = -1;      // linked fader moved with the one dragged
     // name of a preset being saved
     bool fNaming = false, fNameError = false;
     std::string fNameText;
@@ -2029,6 +2318,12 @@ private:
 #endif
 #ifdef TINPLATE_UI_DEMO_FREEZE
     bool fDemoFreezeDone = false;
+#endif
+#ifdef TINPLATE_UI_DEMO_CLEAR
+    bool fDemoClearDone = false;
+#endif
+#ifdef TINPLATE_UI_DEMO_LINK
+    bool fDemoLinkDone = false;
 #endif
 #ifdef TINPLATE_UI_DEMO_MENU
     bool fDemoMenuDone = false;

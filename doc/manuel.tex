@@ -58,7 +58,8 @@ ajouts au neutre, la sortie est celle de l'original au bit près (section~\ref{s
 
 Autour de ce cœur, Tinplate ajoute ce qui manque pour un usage courant : pré-retard, coupe-bas
 sur la réverbération, largeur stéréo, gel (\emph{Freeze}), \emph{ducking} (la réverbération
-s'efface pendant que l'entrée joue), queue jusqu'à 10\,s, gain de sortie, lissage des réglages,
+s'efface pendant que l'entrée joue), vidage de la plaque à chaque nouvelle attaque
+(\emph{Clear}), queue jusqu'à 10\,s, gain de sortie, lissage des réglages,
 affichage du temps de réverbération réel, préréglages, comparaison A/B.
 
 \paragraph{Formats.} VST3 et CLAP pour Windows 64 bits ; VST3, CLAP et LV2 pour Linux. Le greffon
@@ -87,8 +88,8 @@ les préréglages de l'utilisateur (section~\ref{sec:fichiers}).
 \section{Prise en main en une minute}
 
 \begin{enumerate}
-\item \textbf{En insert} sur une piste : le préréglage \ctl{Default} est chargé (Blend 0,30,
-  réverbération d'environ 1,9\,s à 500\,Hz). \textbf{En départ auxiliaire} : choisir
+\item \textbf{En insert} sur une piste : le préréglage \ctl{Default} est chargé (Reverb $-16$\dB,
+  Dry $-1{,}5$\dB, réverbération d'environ 1,9\,s à 500\,Hz). \textbf{En départ auxiliaire} : choisir
   \ctl{Send (100 \% wet)}, qui ne rend que la réverbération.
 \item Régler la longueur avec \ctl{TAIL} ; la valeur en secondes s'affiche sous le bouton et au
   centre de la section 2.
@@ -96,9 +97,11 @@ les préréglages de l'utilisateur (section~\ref{sec:fichiers}).
   \ctl{BANDWIDTH} (aigus qui entrent dans la plaque).
 \item Éloigner la réverbération du son direct avec \ctl{PRE-DELAY} (20 à 40\,ms sur une voix) ;
   nettoyer le grave du mixage avec \ctl{LOW CUT}.
-\item Doser avec \ctl{BLEND}. \ctl{FREEZE} tient la réverbération indéfiniment.
+\item Doser avec les faders \ctl{DRY} (son direct) et \ctl{REVERB} (réverbération seule). \ctl{FREEZE} tient la réverbération indéfiniment.
 \item Pour une réverbération qui laisse la voix lisible, monter \ctl{DUCK} (section 4) : la
   réverbération baisse pendant le chant et revient dans les silences.
+\item Pour que chaque nouveau coup (accord, frappe) parte dans une réverbération propre,
+  allumer \ctl{CLEAR} (section 5).
 \end{enumerate}
 
 % ==============================================================================================
@@ -106,13 +109,13 @@ les préréglages de l'utilisateur (section~\ref{sec:fichiers}).
 
 La fenêtre (900 × 730 points, redimensionnable en gardant ses proportions, nette sur les écrans à
 haute densité) se lit de gauche à droite dans l'ordre du signal : trois sections numérotées
-reliées par des flèches, puis la bande \ctl{DUCKING} (section 4) et le graphique du temps de
-réverbération en bas. Chaque élément a une
+reliées par des flèches, puis les sections \ctl{DUCKING} (4) et \ctl{CLEAR} (5) et le
+graphique du temps de réverbération en bas. Chaque élément a une
 bulle d'aide au survol ; pour un bouton, son titre donne la valeur détaillée.
 
 \begin{center}
 \includegraphics[width=0.8\textwidth]{capture_interface_tin.png}\\[2pt]
-\small Thème clair \ctl{TIN}, bulle d'aide de Tail.
+\small Thème clair \ctl{TIN}, Clear allumé, bulle d'aide de Clear.
 \end{center}
 
 \subsection{En-tête}
@@ -126,7 +129,7 @@ bulle d'aide au survol ; pour un bouton, son titre donne la valeur détaillée.
   (le jeu quitté est gardé, l'autre est rechargé ; à la première visite, B part d'une copie de
   A). \ctl{A>B} (ou \ctl{B>A}) copie le jeu courant dans l'autre. Les deux jeux sont
   enregistrés avec le projet.
-\item[SLATE | TIN.] Thème sombre ou clair, sans effet sur le son ; c'est une préférence de
+\item[SLATE | TIN.] Thème sombre ou clair (panneaux légèrement cuivrés), sans effet sur le son ; c'est une préférence de
   l'ordinateur, commune à toutes les instances et à tous les projets.
 \item[ACTIVE / BYPASSED.] Le Bypass déclaré à l'hôte (section~\ref{sec:lissage}).
 \end{description}
@@ -143,14 +146,27 @@ $-3$\dB{} de son filtre. Au centre, le temps de réverbération (RT60) à 500\,H
 grisés, puisqu'ils n'agissent plus.
 
 \subsection{Section 3 : OUTPUT}
-\ctl{BLEND}, \ctl{WIDTH}, \ctl{LOW CUT}, \ctl{OUTPUT}, puis trois vu-mètres de crête :
-\ctl{IN} (entrée), \ctl{REVERB} (réverbération seule, après Low cut et Width, avant le
-mélange), \ctl{OUT} (sortie), en dBFS ; après une crête, l'affichage redescend avec une constante de temps de 0,25\,s.
+\ctl{WIDTH} et \ctl{LOW CUT}, puis trois faders : \ctl{DRY} (niveau du son direct),
+\ctl{REVERB} (niveau de la réverbération seule) et \ctl{OUTPUT} (gain de la sortie). Les deux
+premiers vont de \og off\fg{} (en bas) à $+6$\dB, avec l'échelle à leur gauche (0\dB{} aux
+quatre cinquièmes de la course) ; Output va de $-24$ à $+12$\dB. La petite chaîne au-dessus de
+Dry et Reverb les lie (chaîne entière, dorée) ou les délie (chaîne brisée) : voir Dry, Reverb
+(section~\ref{sec:reglages}). Un fader suit la souris
+(\textsf{Maj} : quatre fois plus fin) et se manie pour le reste comme un bouton. Puis trois
+vu-mètres de crête : \ctl{IN} (entrée), \ctl{REVERB} (réverbération seule, après Low cut,
+Width et ducking, avant son fader), \ctl{OUT} (sortie), en dBFS ; après une crête, l'affichage redescend avec une constante de temps de 0,25\,s.
 
 \subsection{Section 4 : DUCKING}
 \ctl{DUCK} (profondeur), \ctl{THRESHOLD}, \ctl{ATTACK}, \ctl{RELEASE} ; les trois derniers
-sont grisés tant que Duck est à 0 (\og off\fg), puisqu'ils n'agissent pas. À gauche, le
+sont grisés tant que Duck est à 0 (\og off\fg), puisqu'ils n'agissent pas. En haut, le
 vu-mètre \ctl{CUT} montre de combien la réverbération est baissée en ce moment (0 à 30\dB).
+
+\subsection{Section 5 : CLEAR}
+Le bouton \ctl{CLEAR} (éteint par défaut) et \ctl{FLOOR}, \ctl{TRIGGER}, \ctl{FADE}, grisés
+tant qu'il est éteint. Sous le bouton, l'état de la détection : \og waiting\fg{} (l'entrée
+n'est pas encore passée sous Floor, ou l'ancienne réverbération finit son fondu),
+\og ARMED\fg{} (la prochaine attaque videra la plaque), \og CLEARED\fg{} (allumé 0,2\,s à
+chaque vidage).
 
 \subsection{Temps de réverbération et tonalité}
 En bas, sur une échelle de fréquences de 20\,Hz à 20\,kHz (ou à la fréquence de Nyquist) :
@@ -172,7 +188,7 @@ En bas, sur une échelle de fréquences de 20\,Hz à 20\,kHz (ou à la fréquenc
 \end{itemize}
 
 % ==============================================================================================
-\section{Les réglages}
+\section{Les réglages}\label{sec:reglages}
 
 \begin{center}
 \small
@@ -185,7 +201,9 @@ Bandwidth & 0--1 & 0,5 & passe-bas d'entrée de la plaque (original) \\
 Tail & 0--1,16 & 0,5 & longueur de la réverbération (original jusqu'à 1) \\
 Damping & 0--1 & 0,75 & passe-bas dans la boucle (original) \\
 Freeze & oui/non & non & réverbération tenue sans fin \\
-Blend & 0--1 & 0,25 & part du signal traité (original) ; 1 : réverbération seule \\
+Dry & off--+6\dB & 0\dB & niveau du son direct \\
+Link & oui/non & non & Dry et Reverb liés comme le Blend de l'original \\
+Reverb & off--+6\dB & $-18$\dB & niveau de la réverbération seule \\
 Width & 0--200\,\% & 100\,\% & largeur stéréo de la réverbération \\
 Low cut & 20\,Hz (off)--1\,kHz & off & passe-haut 12\dB/octave sur la réverbération seule \\
 Output & $-24$--+12\dB & 0\dB & gain de toute la sortie \\
@@ -193,12 +211,17 @@ Duck & 0--30\dB & 0 (off) & baisse maximale de la réverbération pendant que l'
 Threshold & $-60$--0\dBFS & $-30$\dBFS & niveau d'entrée où le ducking commence \\
 Attack & 1--200\,ms & 10\,ms & vitesse de la baisse \\
 Release & 50--3000\,ms & 300\,ms & vitesse du retour \\
+Clear & oui/non & non & vider la plaque à chaque nouvelle attaque \\
+Floor & $-80$--$-20$\dBFS & $-50$\dBFS & niveau sous lequel la détection s'arme \\
+Trigger & $-60$--0\dBFS & $-20$\dBFS & niveau d'une attaque \\
+Fade & 10--500\,ms & 60\,ms & fondu de l'ancienne réverbération \\
+Window & 1--200\,ms & 20\,ms & durée maximale de la montée d'une attaque \\
 Bypass & oui/non & non & entrée non traitée, fondu de 10\,ms \\
 \bottomrule
 \end{tabularx}
 \end{center}
-Les défauts des quatre réglages de l'original (Bandwidth, Tail, Damping, Blend) sont ceux qu'un
-hôte LADSPA donne à PlateX2 ; le préréglage \ctl{Default}, chargé à l'ouverture, est différent
+Les défauts des trois réglages de la plaque de l'original (Bandwidth, Tail, Damping) sont ceux
+qu'un hôte LADSPA donne à PlateX2 ; le préréglage \ctl{Default}, chargé à l'ouverture, est différent
 (section~\ref{sec:prereglages}).
 
 \paragraph{Pre-delay.} Retarde l'entrée de la plaque : la réverbération démarre plus tard que le
@@ -228,10 +251,20 @@ jouer par-dessus : le signal sec passe toujours, mais ce qui est joué pendant l
 pas dans la plaque. En le relâchant, la réverbération reprend sa décroissance selon Tail et
 Damping. Détails en section~\ref{sec:freeze}.
 
-\paragraph{Blend.} Mélange du sec et du traité, avec la loi de l'original : traité $=
-\mathrm{blend}^{1{,}53}$, sec $= 1 - \text{traité}$ (figure~\ref{fig:lois}). À 0,25, la
-réverbération est à $-18{,}4$\dB{} et le sec à $-1{,}1$\dB ; à 1, il ne reste que la
-réverbération (départ auxiliaire).
+\paragraph{Dry, Reverb.} Niveaux du son direct et de la réverbération, réglés séparément
+(l'original a un seul bouton Blend, où monter l'un baisse l'autre : traité $=
+\mathrm{blend}^{1{,}53}$, sec $= 1 - \text{traité}$). Reverb 0\dB{} et Dry off : réverbération
+seule, pour un départ auxiliaire. Le mélange de l'original à Blend 0,25 correspond à Reverb
+$-18{,}4$\dB{} et Dry $-1{,}1$\dB.
+
+\paragraph{Lien Dry / Reverb.} Un clic sur la chaîne entre les deux faders les lie : on retrouve
+le Blend de l'original, monter l'un fait descendre l'autre, la somme de leurs gains restant 1
+(Dry 0\dB{} : Reverb off ; Dry $-6$\dB{} : Reverb $-6$\dB ; Dry off : Reverb 0\dB). Liés,
+ils ne montent pas au-dessus de 0\dB. Au moment de lier, c'est Dry qui fixe le mélange : Reverb
+prend la valeur qui complète Dry. Un second clic les délie. Le lien est un réglage (Link),
+appliqué par le calcul lui-même : l'automation de l'hôte le suit aussi, le dernier des deux
+faders déplacé (à la souris ou par l'automation) fixant l'autre. Il fait partie des préréglages
+et des jeux A/B.
 
 \paragraph{Width.} Largeur stéréo de la réverbération seule : 0\,\% la rend mono, 100\,\% la
 laisse telle quelle, 200\,\% double la différence entre les canaux. Le sec n'est pas touché.
@@ -240,7 +273,7 @@ laisse telle quelle, 200\,\% double la différence entre les canaux. Le sec n'es
 réverbération seule : il retire le grave qui brouille le bas du mixage sans toucher au son sec.
 Le bouton est logarithmique ; à son minimum (20\,Hz, \og off\fg), le filtre est retiré.
 
-\paragraph{Output.} Gain de la sortie entière (sec et traité), après le mélange.
+\paragraph{Output.} Gain de la sortie entière (sec et réverbération), après le mélange.
 
 \paragraph{Duck.} Le \emph{ducking} baisse la réverbération pendant que l'entrée joue et la
 laisse revenir dans les silences : la voix (ou l'instrument) reste nette, et la queue s'entend
@@ -257,31 +290,47 @@ Threshold $-30$\dBFS{} et Duck 12\dB, une entrée à $-24$\dBFS{} baisse la rév
 court : la réverbération remonte dans chaque petit silence (entre deux mots) ; long : elle
 attend la fin de la phrase (figure~\ref{fig:duck}).
 
+\paragraph{Clear.} Quand un nouveau son arrive après un silence, l'ancienne réverbération
+s'éteint en un fondu de durée Fade et le nouveau son part dans une plaque vide : chaque accord,
+chaque frappe a sa réverbération propre, sans la queue du précédent. Une attaque est une montée
+de l'entrée de moins de Floor à plus de Trigger en moins de Window millisecondes ; une montée
+plus lente (crescendo, fondu d'entrée) ne vide pas la plaque. Après un vidage, la détection ne se réarme
+qu'une fois le fondu fini et l'entrée repassée sous Floor. Pendant le gel (Freeze), rien n'est
+vidé : le son gelé est gardé. Éteint, Clear ne change rien au son.
+
+\paragraph{Floor, Trigger, Fade, Window.} Floor doit être au-dessus du bruit des silences entre
+les notes (la réverbération n'entre pas dans la détection : seul compte le signal d'entrée),
+Trigger sous le niveau des attaques. Window court (5 à 20\,ms) : seules les attaques franches
+(percussions, cordes pincées) vident la plaque ; long (50 à 200\,ms) : les attaques plus
+douces aussi. Fade court : coupure nette de l'ancienne queue ;
+long : enchaînement plus doux.
+
 % ==============================================================================================
 \section{Préréglages}\label{sec:prereglages}
 
 \subsection{Préréglages d'usine}
 \begin{center}
 \small
-\begin{tabular}{@{}l r r r r r r r r r@{}}
+\begin{tabular}{@{}l r r r r r r r r r r@{}}
 \toprule
-Nom & Bandw. & Tail & Damp. & Blend & Pre-d. & Low cut & Width & Duck & RT60 \\
+Nom & Bandw. & Tail & Damp. & Reverb & Dry & Pre-d. & Low cut & Width & Duck & RT60 \\
 \midrule
-Default           & 0,80 & 0,55 & 0,40 & 0,30 & 12 & 60  & 100 & off & 1,9 \\
-Original (CAPS)   & 0,50 & 0,50 & 0,75 & 0,25 & 0  & off & 100 & off & 1,6 \\
-Vocal plate       & 0,85 & 0,45 & 0,45 & 0,25 & 35 & 150 & 110 & off & 1,7 \\
-Drum plate        & 0,90 & 0,30 & 0,30 & 0,22 & 5  & 200 & 120 & off & 1,3 \\
-Ambience          & 0,70 & 0,15 & 0,50 & 0,20 & 0  & 100 & 130 & off & 0,9 \\
-Dark and long     & 0,55 & 0,85 & 0,75 & 0,35 & 20 & 60  & 100 & off & 2,9 \\
-Bright and wide   & 1,00 & 0,70 & 0,10 & 0,30 & 15 & 120 & 150 & off & 2,6 \\
-Send (100 \% wet) & 0,80 & 0,60 & 0,40 & 1,00 & 20 & 100 & 100 & off & 2,1 \\
-Ducked vocal      & 0,85 & 0,65 & 0,45 & 0,35 & 25 & 150 & 110 & 12  & 2,2 \\
+Default           & 0,80 & 0,55 & 0,40 & $-16{,}0$ & $-1{,}5$ & 12 & 60  & 100 & off & 1,9 \\
+Original (CAPS)   & 0,50 & 0,50 & 0,75 & $-18{,}4$ & $-1{,}1$ & 0  & off & 100 & off & 1,6 \\
+Vocal plate       & 0,85 & 0,45 & 0,45 & $-18{,}4$ & $-1{,}1$ & 35 & 150 & 110 & off & 1,7 \\
+Drum plate        & 0,90 & 0,30 & 0,30 & $-20{,}1$ & $-0{,}9$ & 5  & 200 & 120 & off & 1,3 \\
+Ambience          & 0,70 & 0,15 & 0,50 & $-21{,}4$ & $-0{,}8$ & 0  & 100 & 130 & off & 0,9 \\
+Dark and long     & 0,55 & 0,85 & 0,75 & $-14{,}0$ & $-1{,}9$ & 20 & 60  & 100 & off & 2,9 \\
+Bright and wide   & 1,00 & 0,70 & 0,10 & $-16{,}0$ & $-1{,}5$ & 15 & 120 & 150 & off & 2,6 \\
+Send (100 \% wet) & 0,80 & 0,60 & 0,40 & 0 & off & 20 & 100 & 100 & off & 2,1 \\
+Ducked vocal      & 0,85 & 0,65 & 0,45 & $-14{,}0$ & $-1{,}9$ & 25 & 150 & 110 & 12  & 2,2 \\
 \bottomrule
 \end{tabular}
 \end{center}
-Pre-delay en ms, Low cut en Hz, Width en \%, Duck en dB, RT60 à 500\,Hz en secondes (à
+Reverb et Dry en dB (le mélange de l'original à Blend 0,30, 0,25, 0,22\ldots), Pre-delay en ms, Low cut en Hz, Width en
+\%, Duck en dB, RT60 à 500\,Hz en secondes (à
 44,1\,kHz) ; Output à 0\dB{} partout, Freeze inactif ; Threshold $-30$\dBFS{} et Attack
-10\,ms partout, Release 300\,ms (400\,ms pour Ducked vocal). \og Original (CAPS)\fg{} reproduit l'original au bit près. Ces
+10\,ms partout, Release 300\,ms (400\,ms pour Ducked vocal) ; Clear éteint partout. \og Original (CAPS)\fg{} reproduit l'original au bit près. Ces
 préréglages ont été réglés d'après les lois des réglages, pas à l'oreille. Ils sont aussi
 présentés à l'hôte (liste des programmes).
 
@@ -329,7 +378,7 @@ lui-même.
 \node[blk, below=10mm of plate] (lc) {Low cut};
 \node[blk, left=of lc] (wd) {Width};
 \node[blk, left=of wd] (dk) {× gain\\Duck};
-\node[blk, left=of dk] (mix) {mélange\\Blend};
+\node[blk, left=of dk] (mix) {mélange\\Dry, Reverb};
 \node[blk, left=of mix] (out) {Output};
 \node[blk, left=of out] (byp) {Bypass\\(fondu)};
 \node[blk, below=8mm of byp] (s) {sortie};
@@ -413,7 +462,7 @@ des deux moitiés, de signes alternés, multipliée par 0,6. Les prises des deux
 différentes, la réverbération est stéréo même pour une entrée mono (figure~\ref{fig:reponse}).
 
 \paragraph{Lois des réglages.} Ce sont celles de l'original (figure~\ref{fig:lois}), avec $p$ la
-valeur du bouton :
+valeur du bouton (Tail jusqu'à 1,16) :
 \[
 a_{\mathrm{bw}} = e^{-\pi\,(1 - (0{,}005 + 0{,}994\,p))}, \qquad
 \mathrm{decay} = 0{,}749\,p, \qquad
@@ -430,7 +479,7 @@ $-3$\dB, affichée par l'interface, dépend de la fréquence d'échantillonnage 
 \includegraphics[width=\textwidth]{fig_lois.pdf}
 \caption{À gauche : fréquence à $-3$\dB{} des passe-bas Bandwidth et Damping (une courbe
 s'arrête quand le filtre reste au-dessus de $-3$\dB{} jusqu'à la fréquence de Nyquist). À
-droite : gains du traité et du sec selon Blend.}
+droite : niveau en dB des faders Dry et Reverb selon leur position.}
 \label{fig:lois}
 \end{figure}
 
@@ -500,9 +549,10 @@ Avec $m = (w_L + w_R)/2$, $s = (w_L - w_R)/2$ et $W$ la largeur (Width/100) :
 \[
 w'_L = m + W s, \qquad w'_R = m - W s .
 \]
-Puis, avec $g_w = \mathrm{blend}^{1{,}53}$ et $G = 10^{\mathrm{Output}/20}$ :
+Puis, avec $g_w = 10^{\mathrm{Reverb}/20}$, $g_d = 10^{\mathrm{Dry}/20}$ (0 à \og off\fg,
+exactement 1 à 0\dB) et $G = 10^{\mathrm{Output}/20}$ :
 \[
-y_{L,R} = \bigl(g_w\, w'_{L,R} + (1 - g_w)\, x_{L,R}\bigr)\, G ,
+y_{L,R} = \bigl(g_w\, w'_{L,R} + g_d\, x_{L,R}\bigr)\, G ,
 \]
 où $x_{L,R}$ est l'entrée, non retardée : la latence est nulle. Avec le ducking, $w'_{L,R}$ est
 multiplié avant le mélange par le gain $10^{-c/20}$ décrit ci-dessous.
@@ -529,6 +579,24 @@ réglages agissent tout de suite, sans rampe : le filtre lisse déjà la baisse.
 elle-même n'est pas touchée : seule sa sortie est baissée, si bien que la queue revient avec le
 niveau qu'elle aurait eu sans ducking.
 
+\subsection{Vidage (Clear)}\label{sec:clear}
+
+Le greffon a deux plaques identiques. L'entrée va dans la plaque courante. À une attaque,
+l'autre plaque, vide, devient la plaque courante et reçoit l'entrée dès cet échantillon ;
+l'ancienne ne reçoit plus rien et sa sortie s'éteint en Fade millisecondes (demi-cosinus,
+$g = \tfrac12 + \tfrac12 \cos(\pi t / \text{Fade})$), puis elle est vidée et cesse de calculer.
+Les deux plaques ne calculent ensemble que pendant le fondu. Après le fondu, la sortie est
+exactement celle d'une plaque neuve qui n'aurait reçu que le nouveau son (vérifié au bit près).
+
+Détection : enveloppe de crête $e_n = \max(\max(|x_L|,|x_R|),\; e_{n-1} e^{-1/(0{,}03 f_s)})$
+de l'entrée avant le Pre-delay (montée immédiate, descente de constante de temps 30\,ms, qui
+couvre les passages par zéro d'une note tenue). La détection s'arme quand $e$ est sous Floor et
+qu'aucun fondu n'est en cours ; armée, elle se déclenche si $e$ dépasse Trigger moins de Window
+millisecondes après avoir dépassé Floor, et se désarme sinon. Les échantillons entre le dépassement de Floor
+et celui de Trigger (au plus Window, en général quelques échantillons pour une attaque franche)
+vont encore dans l'ancienne plaque. Éteint, Clear ne fait tourner que la première plaque : la
+sortie est identique au bit à celle sans Clear.
+
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.85\textwidth]{fig_duck.pdf}
@@ -554,9 +622,9 @@ valeurs : la réverbération gelée décroît alors normalement.
 
 L'original applique un changement de réglage au bloc audio suivant, d'un coup : tourner Tail ou
 Blend pendant la lecture produit un crépitement (saut de 0,76 sur une sinusoïde d'amplitude
-0,5 quand Blend passe de 0 à 1). Ici, chaque coefficient (Bandwidth, decay, Damping, gain
-traité, largeur, Output, coefficients du Low cut) va linéairement à sa nouvelle valeur en
-20\,ms, puis la prend exactement (même cas : saut de 0,025). Le Pre-delay change par fondu
+0,5 quand Blend passe de 0 à 1). Ici, chaque coefficient (Bandwidth, decay, Damping, gains de
+Dry et Reverb, largeur, Output, coefficients du Low cut) va linéairement à sa nouvelle valeur en
+20\,ms, puis la prend exactement (même cas, Dry off et Reverb 0\dB{} d'un coup : saut de 0,025). Le Pre-delay change par fondu
 enchaîné de 30\,ms ; un nouveau changement attend la fin du fondu.
 
 \paragraph{Bypass.} La sortie devient l'entrée, exactement, par un fondu de 10\,ms. La plaque
@@ -567,13 +635,15 @@ continue de tourner pendant le Bypass.
 Le code de la plaque est une transcription de celui de CAPS 0.9.26 (classes \texttt{PlateStub},
 \texttt{Delay}, \texttt{LP1}, \texttt{Sine}) qui garde le type de chaque opération (échantillons
 en simple précision, certains produits et sommes en double). Avec Pre-delay 0, Low cut off,
-Width 100\,\%, Output 0\dB, Duck 0 et Freeze inactif (préréglage \og Original (CAPS)\fg, ou
-n'importe quelles valeurs des quatre réglages d'origine dans leurs plages d'origine, Tail jusqu'à
-1), la sortie est \textbf{celle de l'original au
-bit près}, réglages fixes. C'est vérifié à chaque compilation contre le code source de CAPS
-lui-même, appelé comme le ferait un hôte LADSPA : 28 cas (7 réglages à 44,1, 48, 96 et
-192\,kHz, blocs de tailles variées), en calcul strict comme avec les options d'optimisation du
-greffon.
+Width 100\,\%, Output 0\dB, Duck 0, Clear et Freeze inactifs, pour n'importe quelles valeurs
+de Bandwidth, Damping et Tail (jusqu'à 1), la sortie est \textbf{celle de l'original au bit
+près} en réverbération seule (Reverb 0\dB, Dry off : Blend 1 de l'original) et en son direct
+seul (Dry 0\dB, Reverb off : Blend 0), réglages fixes. Pour un mélange, les gains des faders,
+calculés depuis des dB, ne retombent pas exactement sur $\mathrm{blend}^{1{,}53}$ : l'écart est
+celui de l'arrondi ($1{,}3\times10^{-7}$ de la crête au plus sur 20 mélanges). C'est vérifié à
+chaque compilation contre le code source de CAPS lui-même, appelé comme le ferait un hôte
+LADSPA : 32 cas au bit près et 20 mélanges (7 réglages à 44,1, 48, 96 et 192\,kHz, blocs de
+tailles variées), en calcul strict comme avec les options d'optimisation du greffon.
 
 Quand un réglage bouge, la sortie diffère de l'original par le seul lissage
 (section~\ref{sec:lissage}).
@@ -594,18 +664,21 @@ en sortie.
 \item[Voix avec une longue réverbération.] Ducked vocal : Duck 8 à 15\dB, Threshold réglé pour
   que le vu-mètre \ctl{CUT} atteigne Duck sur les passages chantés, Release 300 à 600\,ms pour
   que la queue revienne entre les phrases plutôt qu'entre les mots.
+\item[Accords, frappes.] Clear avec une longue réverbération : chaque accord part dans une
+  plaque propre au lieu de se mélanger à la queue du précédent. Fade 30 à 100\,ms ; monter Floor
+  si la détection reste sur \og waiting\fg{} (silences trop bruités).
 \item[Très longues queues.] Tail au-delà de 1 (jusqu'à 10\,s) pour les nappes et les sons
   isolés ; Damping au-dessus de 0,5 et Low cut évitent que le grave ne s'accumule.
 \item[Batterie.] Drum plate : Tail court, Damping faible pour une queue brillante, Low cut haut.
-  Pour une caisse claire très présente, monter Blend plutôt que Tail.
-\item[Départ auxiliaire.] Send (100\,\% wet) : Blend à 1, on dose par le niveau du départ. Une
+  Pour une caisse claire très présente, monter Reverb plutôt que Tail.
+\item[Départ auxiliaire.] Send (100\,\% wet) : Reverb 0\dB, Dry off ; on dose par le niveau du départ. Une
   seule instance pour plusieurs pistes donne un espace commun.
 \item[Son sombre et lointain.] Bandwidth bas (moins d'aigus qui entrent), Damping haut (aigus qui
   meurent vite), Tail long : Dark and long.
 \item[Largeur.] Width au-delà de 100\,\% élargit la réverbération sans toucher le son direct ;
   vérifier en mono que le mixage ne se creuse pas.
 \item[Nappes.] Jouer un accord, activer Freeze, puis jouer par-dessus : l'accord gelé tient sous
-  le jeu. Monter Blend pour l'entendre davantage.
+  le jeu. Monter Reverb pour l'entendre davantage.
 \item[Comparer deux réglages.] Régler A, copier vers B (\ctl{A>B}), modifier B, puis basculer A
   | B.
 \end{description}
@@ -616,10 +689,6 @@ en sortie.
 \begin{description}
 \item[Avec le projet.] Tous les réglages et le jeu A/B inactif (état \texttt{ab}). Les réglages
   sont relus par leur nom : ajouter un réglage dans une version future ne casse pas un projet.
-  Un projet de la version 1.0.0 s'ouvre avec le ducking à off (son inchangé), son jeu A/B
-  aussi. Les réglages ajoutés en 1.1.0 sont placés après ceux de 1.0.0, si bien que
-  l'automation déjà écrite vise les mêmes réglages ; seule celle de Tail, que l'hôte enregistre
-  sur l'étendue du bouton, se lit sur la nouvelle étendue (0 à 1,16 au lieu de 0 à 1).
 \item[Sur l'ordinateur.] Le thème dans \texttt{tinplate.conf} (\texttt{theme=slate} ou
   \texttt{tin}) et vos préréglages dans \texttt{presets/}, un fichier \texttt{<nom>.preset}
   chacun, dans le dossier :
@@ -628,9 +697,10 @@ en sortie.
   \item Linux : \verb|$XDG_CONFIG_HOME/tinplate/|, à défaut \verb|~/.config/tinplate/|.
   \end{itemize}
 \item[Format d'un préréglage.] Texte, une ligne \texttt{clé=valeur} par réglage
-  (\texttt{bandwidth}, \texttt{tail}, \texttt{damping}, \texttt{blend}, \texttt{predelay},
+  (\texttt{bandwidth}, \texttt{tail}, \texttt{damping}, \texttt{wet}, \texttt{dry}, \texttt{link}, \texttt{predelay},
   \texttt{lowcut}, \texttt{width}, \texttt{output}, \texttt{duck}, \texttt{threshold},
-  \texttt{attack}, \texttt{release}), nombres avec un point décimal quelle que
+  \texttt{attack}, \texttt{release}, \texttt{clear}, \texttt{floor}, \texttt{trigger},
+  \texttt{fade}, \texttt{window}), nombres avec un point décimal quelle que
   soit la langue du système. Une clé absente prend sa valeur par défaut, une valeur hors bornes
   est ramenée dans les bornes, une ligne inconnue est ignorée. Copier le fichier suffit à
   partager un préréglage.
@@ -645,6 +715,8 @@ en sortie.
   fréquence.
 \item Le temps de réverbération affiché est une mesure interpolée, juste à 10\,\% près environ.
 \item Ce qui est joué pendant le gel n'entre pas dans la réverbération gelée.
+\item Clear ne voit que le signal d'entrée : un son qui commence pendant que l'entrée est
+  au-dessus de Floor (legato) ne vide pas la plaque.
 \item Le ducking se règle sur l'entrée du greffon elle-même : il n'y a pas d'entrée latérale
   (\emph{sidechain}) pour le commander depuis une autre piste.
 \item La saisie au clavier (valeurs, noms de préréglages) dépend de l'hôte : certains gardent le
