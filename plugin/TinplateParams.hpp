@@ -20,6 +20,8 @@ enum TinplateParam {
     kParamTail,           // decay of the tank (CAPS "tail"; up to 1.16 here, RT60 10 s at 500 Hz)
     kParamDamping,        // low-pass inside the tank (CAPS "damping")
     kParamSize,           // size of the tank: lengths of its delays, % (100 = CAPS)
+    kParamModDepth,       // depth of the modulation of the tank, % (100 = CAPS)
+    kParamModRate,        // rate of the modulation of the tank, Hz (1.2 = CAPS)
     kParamWet,            // level of the reverb, dB (-60 = off); CAPS has a blend instead
     kParamDry,            // level of the dry signal, dB (-60 = off)
     kParamLink,           // dry and wet linked as the blend of CAPS: gains add up to 1 (0/1)
@@ -58,6 +60,8 @@ static const TinplateRange kTinplateRanges[kParamCount] = {
     {   0.0f,   1.16f,   0.5f },    // tail (CAPS: 0..1; same law beyond, RT60 10 s at 500 Hz)
     {   0.0f,    1.0f,  0.75f },    // damping
     {  50.0f,  200.0f, 100.0f },    // size, %
+    {   0.0f,  200.0f, 100.0f },    // modulation depth, %
+    {   0.1f,    5.0f,   1.2f },    // modulation rate, Hz
     { -60.0f,    6.0f, -18.0f },    // wet, dB (-60 = off)
     { -60.0f,    6.0f,   0.0f },    // dry, dB (-60 = off)
     {   0.0f,    1.0f,   0.0f },    // link
@@ -100,26 +104,26 @@ struct TinplatePreset {
 };
 
 static const TinplatePreset kTinplatePresets[] = {
-    //                      bandw  tail  damp   size   wet   dry   link  pre   lowcut hicut  width  out
+    //                      bandw  tail  damp   size   depth  rate  wet   dry   link  pre   lowcut hicut  width  out
     //                      duck  thresh  att  rel  clear  floor  trigger  fade  window
-    { "Default",          { 0.80f, 0.55f, 0.40f, 100.0f, -16.0f, -1.5f, 0.0f, 12.0f, 60.0f, 20000.0f, 100.0f, 0.0f,
-                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
-    { "Original (CAPS)",  { 0.50f, 0.50f, 0.75f, 100.0f, -18.4f, -1.1f, 0.0f, 0.0f, 20.0f, 20000.0f, 100.0f, 0.0f,
-                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
-    { "Vocal plate",      { 0.85f, 0.45f, 0.45f, 100.0f, -18.4f, -1.1f, 0.0f, 35.0f, 150.0f, 20000.0f, 110.0f, 0.0f,
-                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
-    { "Drum plate",       { 0.90f, 0.30f, 0.30f, 100.0f, -20.1f, -0.9f, 0.0f, 5.0f, 200.0f, 20000.0f, 120.0f, 0.0f,
-                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
-    { "Ambience",         { 0.70f, 0.15f, 0.50f, 100.0f, -21.4f, -0.8f, 0.0f, 0.0f, 100.0f, 20000.0f, 130.0f, 0.0f,
-                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
-    { "Dark and long",    { 0.55f, 0.85f, 0.75f, 100.0f, -14.0f, -1.9f, 0.0f, 20.0f, 60.0f, 20000.0f, 100.0f, 0.0f,
-                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
-    { "Bright and wide",  { 1.00f, 0.70f, 0.10f, 100.0f, -16.0f, -1.5f, 0.0f, 15.0f, 120.0f, 20000.0f, 150.0f, 0.0f,
-                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
-    { "Send (100 % wet)", { 0.80f, 0.60f, 0.40f, 100.0f, 0.0f, -60.0f, 0.0f, 20.0f, 100.0f, 20000.0f, 100.0f, 0.0f,
-                            0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
-    { "Ducked vocal",     { 0.85f, 0.65f, 0.45f, 100.0f, -14.0f, -1.9f, 0.0f, 25.0f, 150.0f, 20000.0f, 110.0f, 0.0f,
-                            12.0f, -30.0f, 10.0f, 400.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Default",          { 0.80f, 0.55f, 0.40f, 100.0f, 100.0f, 1.2f, -16.0f, -1.5f, 0.0f, 12.0f, 60.0f, 20000.0f,
+                            100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Original (CAPS)",  { 0.50f, 0.50f, 0.75f, 100.0f, 100.0f, 1.2f, -18.4f, -1.1f, 0.0f, 0.0f, 20.0f, 20000.0f,
+                            100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Vocal plate",      { 0.85f, 0.45f, 0.45f, 100.0f, 100.0f, 1.2f, -18.4f, -1.1f, 0.0f, 35.0f, 150.0f, 20000.0f,
+                            110.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Drum plate",       { 0.90f, 0.30f, 0.30f, 100.0f, 100.0f, 1.2f, -20.1f, -0.9f, 0.0f, 5.0f, 200.0f, 20000.0f,
+                            120.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Ambience",         { 0.70f, 0.15f, 0.50f, 100.0f, 100.0f, 1.2f, -21.4f, -0.8f, 0.0f, 0.0f, 100.0f, 20000.0f,
+                            130.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Dark and long",    { 0.55f, 0.85f, 0.75f, 100.0f, 100.0f, 1.2f, -14.0f, -1.9f, 0.0f, 20.0f, 60.0f, 20000.0f,
+                            100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Bright and wide",  { 1.00f, 0.70f, 0.10f, 100.0f, 100.0f, 1.2f, -16.0f, -1.5f, 0.0f, 15.0f, 120.0f, 20000.0f,
+                            150.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Send (100 % wet)", { 0.80f, 0.60f, 0.40f, 100.0f, 100.0f, 1.2f, 0.0f, -60.0f, 0.0f, 20.0f, 100.0f, 20000.0f,
+                            100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+    { "Ducked vocal",     { 0.85f, 0.65f, 0.45f, 100.0f, 100.0f, 1.2f, -14.0f, -1.9f, 0.0f, 25.0f, 150.0f, 20000.0f,
+                            110.0f, 0.0f, 12.0f, -30.0f, 10.0f, 400.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
 };
 
 static const int kTinplatePresetCount = sizeof(kTinplatePresets) / sizeof(kTinplatePresets[0]);

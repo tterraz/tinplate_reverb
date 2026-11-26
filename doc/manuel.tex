@@ -142,8 +142,9 @@ quand il reste au-dessus de $-3$\dB{} jusqu'à la fréquence de Nyquist).
 
 \subsection{Section 2 : PLATE}
 \ctl{TAIL} et \ctl{DAMPING}, les deux grands boutons de la boucle ; sous Damping, la fréquence à
-$-3$\dB{} de son filtre. Le petit bouton \ctl{SIZE}, à droite de \ctl{FREEZE}, règle la taille
-de la plaque. Au centre, le temps de réverbération (RT60) à 500\,Hz, en grand, et à
+$-3$\dB{} de son filtre. À droite de \ctl{FREEZE}, trois petits boutons : \ctl{SIZE} (taille
+de la plaque), \ctl{DEPTH} et \ctl{RATE} (profondeur et vitesse de la modulation, grisés
+pendant le gel, qui l'arrête). Au centre, le temps de réverbération (RT60) à 500\,Hz, en grand, et à
 125\,Hz et 4\,kHz. Le bouton \ctl{FREEZE} gèle la réverbération ; Tail et Damping sont alors
 grisés, puisqu'ils n'agissent plus.
 
@@ -203,6 +204,8 @@ Bandwidth & 0--1 & 0,5 & passe-bas d'entrée de la plaque (original) \\
 Tail & 0--1,16 & 0,5 & longueur de la réverbération (original jusqu'à 1) \\
 Damping & 0--1 & 0,75 & passe-bas dans la boucle (original) \\
 Size & 50--200\,\% & 100\,\% & taille de la plaque (100\,\% : l'original) \\
+Depth & 0--200\,\% & 100\,\% & profondeur de la modulation (100\,\% : l'original) \\
+Rate & 0,1--5\,Hz & 1,2\,Hz & vitesse de la modulation (1,2\,Hz : l'original) \\
 Freeze & oui/non & non & réverbération tenue sans fin \\
 Dry & off--+6\dB & 0\dB & niveau du son direct \\
 Link & oui/non & non & Dry et Reverb liés comme le Blend de l'original \\
@@ -253,6 +256,14 @@ une plaque deux fois plus grande sonne environ deux fois plus longtemps (2,1\,s 
 4,3\,s à 200\,\%, à 500\,Hz pour Tail 0,6 et Damping 0,4 ; jusqu'à 18\,s à Tail maximal).
 Un changement de taille glisse en 100\,ms : la hauteur de la réverbération en cours varie
 brièvement, sans clic. Size agit aussi pendant le gel (glissement de hauteur du son gelé).
+
+\paragraph{Depth, Rate.} La boucle de la plaque est lentement modulée (un chorus très
+discret), ce qui casse ses résonances fixes et fait vivre la queue. Depth règle l'ampleur de
+cette modulation (0 : plaque immobile, plus métallique ; 200\,\% : chorus marqué, la hauteur
+de la queue ondule), Rate sa vitesse (lente : flottement ; rapide : vibrato). Aux valeurs de
+l'original, 100\,\% et 1,2\,Hz, le son est celui de l'original au bit près. Un changement
+de vitesse garde la phase de l'oscillateur : pas de clic. Le temps de réverbération affiché est
+mesuré à Depth 100\,\% : à Depth 0, l'aigu tient un peu plus longtemps.
 
 \paragraph{Damping.} Passe-bas du premier ordre dans la boucle : à chaque tour, les aigus perdent
 un peu plus que les graves, si bien qu'ils s'éteignent plus tôt (son plus sombre, plus
@@ -475,7 +486,10 @@ millisecondes ci-dessus) sont ceux de l'original et suivent la fréquence d'éch
 
 \paragraph{Modulation.} Les deux passe-tout modulés lisent leur retard par interpolation
 linéaire, décalé par une sinusoïde de 1,2\,Hz d'amplitude 0,4\,ms ($\pm 17$ échantillons à
-44,1\,kHz), en quadrature d'une moitié à l'autre. Cette lente variation casse les résonances
+44,1\,kHz), en quadrature d'une moitié à l'autre ; Rate règle la fréquence, Depth multiplie
+l'amplitude (0 à 2, mémoire réservée pour 2). Quand Rate change, l'oscillateur récursif
+($y_n = 2\cos\omega\, y_{n-1} - y_{n-2}$) est réinitialisé à la nouvelle fréquence avec la
+phase qu'il avait, tirée de ses deux dernières valeurs ; Depth change en 200\,ms. Cette lente variation casse les résonances
 fixes de la boucle (son métallique, selon Dattorro) et donne à la queue son mouvement.
 
 \paragraph{Sorties.} Chaque canal est la somme de six prises dans les retards et les passe-tout
@@ -674,7 +688,7 @@ Le code de la plaque est une transcription de celui de CAPS 0.9.26 (classes \tex
 \texttt{Delay}, \texttt{LP1}, \texttt{Sine}) qui garde le type de chaque opération (échantillons
 en simple précision, certains produits et sommes en double). Avec Pre-delay 0, Low cut et High
 cut off,
-Width 100\,\%, Output 0\dB, Size 100\,\%, Duck 0, Clear et Freeze inactifs, pour n'importe
+Width 100\,\%, Output 0\dB, Size et Depth 100\,\%, Rate 1,2\,Hz, Duck 0, Clear et Freeze inactifs, pour n'importe
 quelles valeurs de Bandwidth, Damping et Tail (jusqu'à 1), la sortie est \textbf{celle de l'original au bit
 près} en réverbération seule (Reverb 0\dB, Dry off : Blend 1 de l'original) et en son direct
 seul (Dry 0\dB, Reverb off : Blend 0), réglages fixes. Pour un mélange, les gains des faders,

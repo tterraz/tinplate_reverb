@@ -13,7 +13,8 @@
  * the original code, tests/caps/).  Changes: no LADSPA, std::vector buffers, the x87-only
  * truncation mode dropped (the original also truncates with (int) on SSE2), and the coefficients
  * set by the caller (for smoothing; with steady controls they are those of PlateX2::cycle()),
- * a depth of modulation (1: the original; Freeze takes it to 0), and a size: the lengths of the
+ * a depth (1: the original, up to 2; Freeze takes it to 0) and a rate of modulation (1.2 Hz:
+ * the original; changed without a jump of phase), and a size: the lengths of the
  * delays of the tank and the output taps times 0.5 to 2, rounded (1: the original).  A delay
  * reads the sample written n steps before (the read pointer of the original, computed from the
  * write one, same values).  A change of size glides each length linearly to its new integer
@@ -137,6 +138,15 @@ public:
 
     void setF(const double f, const double fs, const double phase) { setW(f * 2 * M_PI / fs, phase); }
 
+    // new angular frequency, same phase: the next output continues the current one (no jump)
+    void retune(const double w)
+    {
+        const double last = y[z], before = y[z ^ 1];   // sin(phi), sin(phi - w0)
+        const double c = 0.5 * b, s = std::sqrt(std::fmax(1.0 - c * c, 1e-30));
+        const double phi = std::atan2(last, (last * c - before) / s);
+        setW(w, phi + w);
+    }
+
     void setW(const double w, const double phase)
     {
         b = 2 * std::cos(w);
@@ -162,11 +172,12 @@ public:
     Delay delay;
     Sine lfo;
 
+    // room for a width up to 2 w (depth 200 %)
     void init(const int n, const int w, const int capacity)
     {
         n0 = static_cast<float>(n);
         width = static_cast<float>(w);
-        delay.init(n + w, capacity + w + 2);
+        delay.init(n + w, capacity + 2 * w + 2);
     }
 
     void reset() { delay.reset(); }
@@ -319,8 +330,18 @@ public:
             tank.lattice[i].reset();
             tank.damping[i].reset();
         }
-        tank.mlattice[0].lfo.setF(1.2, fFs, 0);
-        tank.mlattice[1].lfo.setF(1.2, fFs, .5 * M_PI);
+        tank.mlattice[0].lfo.setF(fRate, fFs, 0);
+        tank.mlattice[1].lfo.setF(fRate, fFs, .5 * M_PI);
+    }
+
+    // rate of the modulation, Hz (the original: 1.2), changed without a jump of phase
+    void setModRate(const double hz)
+    {
+        if (hz == fRate)
+            return;
+        fRate = hz;
+        tank.mlattice[0].lfo.retune(2 * M_PI * hz / fFs);
+        tank.mlattice[1].lfo.retune(2 * M_PI * hz / fFs);
     }
 
     // coefficients of the two low-passes (a0)
@@ -331,7 +352,7 @@ public:
         tank.damping[1].set(a0);
     }
 
-    // depth of the modulation, 1 = original; 0: integer delays, no interpolation loss (freeze)
+    // depth of the modulation, 1 = original, up to 2; 0: integer delays, no interpolation loss
     void setModulation(const float scale)
     {
         tank.mlattice[0].width = tank.mlattice[1].width = fModWidth * scale;
@@ -443,6 +464,7 @@ private:
     static const int kLengths = 20;
     float fFs = 44100.0f;
     float fModWidth = 0.0f;
+    double fRate = 1.2;
     float fSize = 1.0f;
     float fBase[kLengths] = {}, fLen[kLengths] = {}, fTarget[kLengths] = {}, fStep[kLengths] = {};
     int fGlideLeft = 0;

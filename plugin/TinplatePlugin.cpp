@@ -253,6 +253,11 @@ protected:
         case kParamTail:      set(p, "Tail", "tail", ""); break;
         case kParamDamping:   set(p, "Damping", "damping", ""); break;
         case kParamSize:      set(p, "Size", "size", "%"); break;
+        case kParamModDepth:  set(p, "Modulation depth", "depth", "%"); break;
+        case kParamModRate:
+            set(p, "Modulation rate", "rate", "Hz");
+            p.hints |= kParameterIsLogarithmic;
+            break;
         case kParamWet:       set(p, "Reverb level", "wet", "dB"); break;
         case kParamDry:       set(p, "Dry level", "dry", "dB"); break;
         case kParamLink:
@@ -540,7 +545,11 @@ private:
         fDecay.set(freeze ? 1.0f : TinplateLaw::decay(fParams[kParamTail]), n);
         fDamping.set(freeze ? 1.0f : static_cast<float>(TinplateLaw::dampingCoef(fParams[kParamDamping])), n);
         fInGain.set(freeze ? 0.0f : 1.0f, n);
-        fModulation.set(freeze ? 0.0f : 1.0f, ramp ? static_cast<int>(0.2 * sr) : 0);
+        fModulation.set(freeze ? 0.0f : fParams[kParamModDepth] / 100.0f, ramp ? static_cast<int>(0.2 * sr) : 0);
+        // rate: 1.2 Hz exactly as the original (the float parameter is not exactly 1.2)
+        const double rate = fParams[kParamModRate] == 1.2f ? 1.2 : static_cast<double>(fParams[kParamModRate]);
+        for (PlateCore::Plate& p : fPlate)
+            p.setModRate(rate);
         float wetDb = fParams[kParamWet], dryDb = fParams[kParamDry];
         if (fParams[kParamLink] > 0.5f)
         {
@@ -565,7 +574,7 @@ private:
         fHighCut.set(fParams[kParamHighCut], sr, n);
         // size: the lengths glide in 100 ms (pitch glide), taken at once when not ramping
         for (PlateCore::Plate& p : fPlate)
-            p.setSize(fParams[kParamSize] * 0.01f, ramp ? static_cast<int>(0.1 * sr) : 0);
+            p.setSize(fParams[kParamSize] / 100.0f, ramp ? static_cast<int>(0.1 * sr) : 0);
         // ducking: no ramp, the cut is smoothed by the attack and release themselves
         fDuckDepth = fParams[kParamDuck];
         fDuckThresholdDb = fParams[kParamThreshold];

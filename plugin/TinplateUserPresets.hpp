@@ -42,7 +42,7 @@ static const size_t kMaxNameLength = 24;
 
 // file keys of the preset parameters kParamBandwidth .. kParamWindow (symbols of the parameters)
 static const char* const kUserPresetKeys[kPresetParamCount] = {
-    "bandwidth", "tail", "damping", "size", "wet", "dry", "link", "predelay", "lowcut", "highcut", "width", "output",
+    "bandwidth", "tail", "damping", "size", "depth", "rate", "wet", "dry", "link", "predelay", "lowcut", "highcut", "width", "output",
     "duck", "threshold", "attack", "release", "clear", "floor", "trigger", "fade", "window",
 };
 

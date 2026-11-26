@@ -146,7 +146,7 @@ static const Rect kPlot    = { 150, 600, 680, 104 };   // decay time against fre
 // knobs and faders (a fader: cx, cy = centre of its track, r = half its length)
 enum { kKnobPredelay = 0, kKnobBandwidth, kKnobTail, kKnobDamping, kKnobWet, kKnobWidth, kKnobLowCut,
        kKnobOutput, kKnobDuck, kKnobThreshold, kKnobAttack, kKnobRelease, kKnobFloor, kKnobTrigger, kKnobFade,
-       kKnobWindow, kKnobDry, kKnobSize, kKnobHighCut, kNumKnobs };
+       kKnobWindow, kKnobDry, kKnobSize, kKnobHighCut, kKnobModDepth, kKnobModRate, kNumKnobs };
 
 struct KnobDef {
     int param;
@@ -203,12 +203,18 @@ static constexpr KnobDef kKnobs[kNumKnobs] = {
       "Short: only sharp attacks (drums, plucks); long: softer ones too." },
     { kParamDry,       745.0f, 215.0f, 95.0f, "DRY",
       "Level of the dry signal, dB (at the bottom: off). Not delayed: no latency." },
-    { kParamSize,      555.0f, 330.0f, 18.0f, "SIZE",
+    { kParamSize,      435.0f, 318.0f, 16.0f, "SIZE",
       "Size of the plate: lengths of its delays, 50 to 200 % (100 %: the original). Larger: deeper, "
       "denser and longer (the decay grows with the size). A change glides in 100 ms (brief pitch glide)." },
     { kParamHighCut,   675.0f, 298.0f, 18.0f, "HIGH CUT",
       "Low-pass on the reverb only (12 dB / octave): a darker tail, the attack and the dry sound "
       "untouched. At the maximum: off." },
+    { kParamModDepth,  510.0f, 318.0f, 16.0f, "DEPTH",
+      "Depth of the modulation of the plate (slow chorus of the tail), 0 to 200 %. 100 %: the "
+      "original. 0: still plate, no loss of highs." },
+    { kParamModRate,   585.0f, 318.0f, 16.0f, "RATE",
+      "Rate of the modulation of the plate, 0.1 to 5 Hz. 1.2 Hz: the original. A change keeps the "
+      "phase (no click)." },
 };
 
 // kKnobs follows the order of the enum above
@@ -221,11 +227,12 @@ static_assert(kKnobs[kKnobPredelay].param == kParamPredelay && kKnobs[kKnobBandw
               && kKnobs[kKnobFloor].param == kParamFloor && kKnobs[kKnobTrigger].param == kParamTrigger
               && kKnobs[kKnobFade].param == kParamFade && kKnobs[kKnobWindow].param == kParamWindow
               && kKnobs[kKnobDry].param == kParamDry && kKnobs[kKnobSize].param == kParamSize
-              && kKnobs[kKnobHighCut].param == kParamHighCut,
+              && kKnobs[kKnobHighCut].param == kParamHighCut && kKnobs[kKnobModDepth].param == kParamModDepth
+              && kKnobs[kKnobModRate].param == kParamModRate,
               "kKnobs: one entry per knob, in the order of the enum");
 
-static const Rect kFreeze  = { 300, 318, 110, 30 };
-static const Rect kRt      = { 270, 360, 330, 80 };    // decay time readout
+static const Rect kFreeze  = { 270, 303, 104, 30 };
+static const Rect kRt      = { 270, 372, 330, 72 };    // decay time readout
 static const Rect kPreset  = { 384, 16, 196, 26 };     // drop-down box; the list opens below it
 static const Rect kAB      = { 588, 17, 50, 24 };      // A | B
 static const Rect kCopy    = { 642, 17, 34, 24 };      // copy the current set to the other
@@ -741,7 +748,7 @@ private:
 
     static bool logarithmic(const int p)
     {
-        return p == kParamLowCut || p == kParamHighCut || p == kParamAttack || p == kParamRelease || p == kParamFade
+        return p == kParamLowCut || p == kParamHighCut || p == kParamModRate || p == kParamAttack || p == kParamRelease || p == kParamFade
             || p == kParamWindow;
     }
 
@@ -1235,7 +1242,10 @@ private:
         const char* fmt = "%.1f";
         if (p <= kParamDamping)
             fmt = "%.3f";
-        else if (p == kParamPredelay || p == kParamLowCut || p == kParamHighCut || p == kParamWidth || p == kParamSize || p == kParamThreshold
+        else if (p == kParamModRate)
+            fmt = "%.2f";
+        else if (p == kParamPredelay || p == kParamLowCut || p == kParamHighCut || p == kParamWidth || p == kParamSize || p == kParamModDepth
+                 || p == kParamThreshold
                  || p == kParamRelease || p == kParamFloor || p == kParamTrigger || p == kParamFade
                  || p == kParamWindow)
             fmt = "%.0f";
@@ -1304,7 +1314,9 @@ private:
                 std::snprintf(buf, size, "%.0f Hz", v);
             break;
         case kParamWidth:
-        case kParamSize:   std::snprintf(buf, size, "%.0f %%", v); break;
+        case kParamSize:
+        case kParamModDepth: std::snprintf(buf, size, "%.0f %%", v); break;
+        case kParamModRate:  std::snprintf(buf, size, "%.2f Hz", v); break;
         case kParamOutput: std::snprintf(buf, size, "%+.1f dB", v); break;
         case kParamDuck:
             if (v < 0.05f)
@@ -1577,7 +1589,12 @@ private:
         drawKnob(kKnobDamping);
         globalAlpha(1.0f);
         drawKnob(kKnobSize);   // acts while frozen too (pitch glide of the frozen sound)
-        divider(kSecTank.x + 12, kSecTank.x + kSecTank.w - 12, 300);
+        if (frozen)
+            globalAlpha(0.35f);   // the modulation stops while frozen
+        drawKnob(kKnobModDepth);
+        drawKnob(kKnobModRate);
+        globalAlpha(1.0f);
+        divider(kSecTank.x + 12, kSecTank.x + kSecTank.w - 12, 290);
 
         button(kFreeze, frozen, nullptr);
         led(kFreeze.x + 16, kFreeze.y + kFreeze.h * 0.5f, frozen);
@@ -1586,18 +1603,18 @@ private:
 
         // decay time readout
         const float cx = kSecTank.x + kSecTank.w * 0.5f;
-        label(cx, 376, 9.5f, fT->dim, ALIGN_CENTER | ALIGN_MIDDLE, "DECAY TIME (RT60) AT 500 HZ", 1.2f);
+        label(cx, 386, 9.5f, fT->dim, ALIGN_CENTER | ALIGN_MIDDLE, "DECAY TIME (RT60) AT 500 HZ", 1.2f);
         char b[64];
         if (frozen)
             std::snprintf(b, sizeof(b), "infinite");
         else
             std::snprintf(b, sizeof(b), "%.2f s", decaySeconds(500.0));
-        label(cx, 402, 22, fT->gold, ALIGN_CENTER | ALIGN_MIDDLE, b, 1);
+        label(cx, 408, 22, fT->gold, ALIGN_CENTER | ALIGN_MIDDLE, b, 1);
         if (frozen)
             std::snprintf(b, sizeof(b), "frozen: the plate keeps ringing");
         else
             std::snprintf(b, sizeof(b), "125 Hz  %.2f s      4 kHz  %.2f s", decaySeconds(125.0), decaySeconds(4000.0));
-        label(cx, 428, 10, fT->dim, ALIGN_CENTER | ALIGN_MIDDLE, b, 0.5f);
+        label(cx, 430, 10, fT->dim, ALIGN_CENTER | ALIGN_MIDDLE, b, 0.5f);
     }
 
     void drawOutputSection()

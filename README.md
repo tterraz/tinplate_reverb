@@ -16,7 +16,8 @@ measured decay-time display, presets and A/B comparison.
 - The three plate controls of the original with their ranges and laws: **Bandwidth**, **Tail**,
   **Damping**; shown with their meaning (-3 dB frequencies, decay time).
   **Tail** goes beyond the original range with the same law, up to 10 s at 500 Hz; **Size**
-  (50 to 200 %) scales the plate (longer delays: deeper, denser, longer).
+  (50 to 200 %) scales the plate (longer delays: deeper, denser, longer); **Depth** and **Rate**
+  set the modulation of the tank (100 % and 1.2 Hz: the original).
 - Smooth automation: every coefficient glides in 20 ms (the original jumps at the next block).
 - **Pre-delay** (0-250 ms, crossfaded changes), **Low cut** and **High cut** on the reverb
   (12 dB/octave),

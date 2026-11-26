@@ -6,9 +6,8 @@ demandera un nouveau numéro de version. Détails de l'existant : `LISEZMOI.md`.
 ## Son
 - **A. Coupe-haut de la réverbération** : **fait** (High cut 1 à 20 kHz, off au maximum, après
   Low cut ; courbe de tonalité ; identité avec CAPS gardée à off).
-- **B. Modulation réglable** : profondeur (0 à 200 %) et vitesse (0,1 à 5 Hz) du LFO de la
-  plaque ; 100 % et 1,2 Hz = l'original (identité gardée). Plus : chorus ample ; 0 : plaque
-  immobile, sans perte d'aigu (comme pendant le gel).
+- **B. Modulation réglable** : **faite** (Depth 0 à 200 %, Rate 0,1 à 5 Hz ; identité à 100 % et
+  1,2 Hz ; changement de vitesse sans saut de phase).
 - **C. Taille de la plaque** : **faite** (non publiée) : Size 50 à 200 %, durée non compensée
   (1b), glissement de 100 ms (2a), table des RT60 à 50, 100, 150 et 200 % (`LISEZMOI.md`).
 - **D. Entrée stéréo** (option) : L et R entrent chacun dans une moitié de la plaque au lieu de
