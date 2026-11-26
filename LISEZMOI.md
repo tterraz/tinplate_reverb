@@ -144,8 +144,9 @@ Repris de Brimstone tel quel (même comportement, voir `../brimstone_vst3/LISEZM
   `output`, `duck`, `threshold`, `attack`, `release`, `clear`, `floor`, `trigger`, `fade`,
   `window` ; Freeze et Bypass exclus) ;
 - **A/B** : deux jeux de réglages, état DPF `ab` enregistré avec le projet ;
-- **thèmes** Slate (sombre) et Tin (clair ; panneaux et graphique teintés de cuivre à 12 % depuis 1.1.0, fond de fenêtre, en-tête, boutons et faders neutres,
-  demande de l'utilisateur), pastille SLATE | TIN, préférence de l'utilisateur
+- **thèmes** Slate (sombre) et Tin (clair, gris légèrement vert « sage » : gris clairs de 1.0.0
+  mêlés à 22 % de (155, 175, 155) ; choisi par l'utilisateur parmi tin, pewter, mist, sage,
+  captures dans `doc/captures/themes/`), pastille SLATE | TIN, préférence de l'utilisateur
   dans `tinplate.conf` (`theme=slate|tin`), non enregistrée avec le projet.
 Code : `plugin/TinplateUI.cpp`, `TinplatePrefs.hpp`, `TinplateUserPresets.hpp`.
 
