@@ -14,7 +14,8 @@
  * 2. Bypass: output == input, exactly.
  * 3. Pre-delay: the wet response starts exactly that many samples later (not identical
  *    afterwards: the modulation of the tank runs from the start).
- * 4. Low cut: a 50 Hz tone in the wet signal loses >= 30 dB with the low cut at 500 Hz.
+ * 4. Low cut: a 50 Hz tone in the wet signal loses >= 30 dB with the low cut at 500 Hz; high
+ *    cut: an 8 kHz tone loses >= 30 dB with the high cut at 1 kHz.
  * 5. Width: 0 % gives L == R (wet only); 200 % doubles the side signal.
  * 6. Freeze: the tail keeps its level for 10 s, ignores the input, then decays again.
  * 7. Decay time: RT60 measured on the impulse response (tools/rt60_measure.hpp) between the
@@ -300,7 +301,7 @@ int main()
     }
 
     // 4. low cut ----------------------------------------------------------------------------------
-    std::printf("4. low cut\n");
+    std::printf("4. low cut, high cut\n");
     {
         std::vector<float> tone(static_cast<size_t>(2.0 * sr));
         for (size_t i = 0; i < tone.size(); ++i)
@@ -314,6 +315,16 @@ int main()
         char buf[96];
         std::snprintf(buf, sizeof(buf), "50 Hz with low cut 500 Hz: %.1f dB", loss);
         check(loss < -30.0, buf);
+
+        for (size_t i = 0; i < tone.size(); ++i)
+            tone[i] = 0.5f * static_cast<float>(std::sin(2.0 * M_PI * 8000.0 * i / sr));
+        s = originalSettings(1.0f, 0.6f, 0.0f, 1.0f);
+        process(s, sr, tone, tone, rL, rR);
+        s.values[kParamHighCut] = 1000.0f;
+        process(s, sr, tone, tone, oL, oR);
+        const double hloss = db(rms(oL, a, tone.size()) / rms(rL, a, tone.size()));
+        std::snprintf(buf, sizeof(buf), "8 kHz with high cut 1 kHz: %.1f dB", hloss);
+        check(hloss < -30.0, buf);
     }
 
     // 5. width ------------------------------------------------------------------------------------

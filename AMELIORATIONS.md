@@ -4,9 +4,8 @@ Proposées le 2026-11-26 (après la release `v1.1.0`), en attente de décision. 
 demandera un nouveau numéro de version. Détails de l'existant : `LISEZMOI.md`.
 
 ## Son
-- **A. Coupe-haut de la réverbération** (High cut, 1 à 20 kHz, off au maximum), pendant du Low
-  cut : assombrir la queue sans toucher l'attaque ni le sec. Tracé sur la courbe de tonalité.
-  Neutre à off (identité avec CAPS gardée).
+- **A. Coupe-haut de la réverbération** : **fait** (High cut 1 à 20 kHz, off au maximum, après
+  Low cut ; courbe de tonalité ; identité avec CAPS gardée à off).
 - **B. Modulation réglable** : profondeur (0 à 200 %) et vitesse (0,1 à 5 Hz) du LFO de la
   plaque ; 100 % et 1,2 Hz = l'original (identité gardée). Plus : chorus ample ; 0 : plaque
   immobile, sans perte d'aigu (comme pendant le gel).

@@ -244,6 +244,17 @@ def fig_duck():
     save(fig, "fig_duck.pdf")
 
 
+def high_cut_gain(hz, f, fs):
+    """2nd-order Butterworth low-pass (RBJ) of the plugin, magnitude at f."""
+    w0 = 2.0 * np.pi * min(hz, 0.45 * fs) / fs
+    cw, alpha = np.cos(w0), np.sin(w0) / (2.0 * np.sqrt(0.5))
+    a0 = 1.0 + alpha
+    b = np.array([(1 - cw) / 2, 1 - cw, (1 - cw) / 2]) / a0
+    a = np.array([1.0, -2 * cw / a0, (1 - alpha) / a0])
+    z = np.exp(-1j * 2.0 * np.pi * np.asarray(f) / fs)
+    return np.abs((b[0] + b[1] * z + b[2] * z * z) / (a[0] + a[1] * z + a[2] * z * z))
+
+
 def fig_ton():
     fs = 44100.0
     f = np.geomspace(20.0, 20000.0, 400)
@@ -252,6 +263,8 @@ def fig_ton():
         ax.semilogx(f, db(one_pole_gain(bandwidth_coef(p), f, fs)), ls, color=STEEL, label="Bandwidth %.1f" % p)
     for hz, ls in ((60.0, "-"), (150.0, "--"), (500.0, ":")):
         ax.semilogx(f, db(low_cut_gain(hz, f, fs)), ls, color=BRASS, label="Low cut %g Hz" % hz)
+    for hz, ls in ((8000.0, "-"), (3000.0, "--")):
+        ax.semilogx(f, db(high_cut_gain(hz, f, fs)), ls, color=RUST, label="High cut %g kHz" % (hz / 1000))
     ax.set_ylim(-30, 2)
     ax.set_xlim(20, 20000)
     ax.set_xlabel("fréquence (Hz), à 44,1 kHz")

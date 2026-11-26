@@ -18,7 +18,8 @@ measured decay-time display, presets and A/B comparison.
   **Tail** goes beyond the original range with the same law, up to 10 s at 500 Hz; **Size**
   (50 to 200 %) scales the plate (longer delays: deeper, denser, longer).
 - Smooth automation: every coefficient glides in 20 ms (the original jumps at the next block).
-- **Pre-delay** (0-250 ms, crossfaded changes), **Low cut** on the reverb (12 dB/octave),
+- **Pre-delay** (0-250 ms, crossfaded changes), **Low cut** and **High cut** on the reverb
+  (12 dB/octave),
   **Width**; faders for the **Dry** and **Reverb** levels (in place of the Blend of the
   original) and the **Output** gain; a chain icon links Dry and Reverb so that they behave as
   the Blend of the original (raising one lowers the other), in the DSP: host automation

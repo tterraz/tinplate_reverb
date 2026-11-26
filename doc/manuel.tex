@@ -96,7 +96,8 @@ les préréglages de l'utilisateur (section~\ref{sec:fichiers}).
 \item Assombrir ou éclaircir avec \ctl{DAMPING} (aigus qui meurent plus vite dans la queue) et
   \ctl{BANDWIDTH} (aigus qui entrent dans la plaque).
 \item Éloigner la réverbération du son direct avec \ctl{PRE-DELAY} (20 à 40\,ms sur une voix) ;
-  nettoyer le grave du mixage avec \ctl{LOW CUT}.
+  nettoyer le grave du mixage avec \ctl{LOW CUT} ; adoucir l'aigu de la queue avec
+  \ctl{HIGH CUT}.
 \item Doser avec les faders \ctl{DRY} (son direct) et \ctl{REVERB} (réverbération seule). \ctl{FREEZE} tient la réverbération indéfiniment.
 \item Pour une réverbération qui laisse la voix lisible, monter \ctl{DUCK} (section 4) : la
   réverbération baisse pendant le chant et revient dans les silences.
@@ -147,14 +148,14 @@ de la plaque. Au centre, le temps de réverbération (RT60) à 500\,Hz, en grand
 grisés, puisqu'ils n'agissent plus.
 
 \subsection{Section 3 : OUTPUT}
-\ctl{WIDTH} et \ctl{LOW CUT}, puis trois faders : \ctl{DRY} (niveau du son direct),
+\ctl{WIDTH}, \ctl{LOW CUT} et \ctl{HIGH CUT}, puis trois faders : \ctl{DRY} (niveau du son direct),
 \ctl{REVERB} (niveau de la réverbération seule) et \ctl{OUTPUT} (gain de la sortie). Les deux
 premiers vont de \og off\fg{} (en bas) à $+6$\dB, avec l'échelle à leur gauche (0\dB{} aux
 quatre cinquièmes de la course) ; Output va de $-24$ à $+12$\dB. La petite chaîne au-dessus de
 Dry et Reverb les lie (chaîne entière, dorée) ou les délie (chaîne brisée) : voir Dry, Reverb
 (section~\ref{sec:reglages}). Un fader suit la souris
 (\textsf{Maj} : quatre fois plus fin) et se manie pour le reste comme un bouton. Puis trois
-vu-mètres de crête : \ctl{IN} (entrée), \ctl{REVERB} (réverbération seule, après Low cut,
+vu-mètres de crête : \ctl{IN} (entrée), \ctl{REVERB} (réverbération seule, après Low cut, High cut,
 Width et ducking, avant son fader), \ctl{OUT} (sortie), en dBFS ; après une crête, l'affichage redescend avec une constante de temps de 0,25\,s.
 
 \subsection{Section 4 : DUCKING}
@@ -176,7 +177,7 @@ En bas, sur une échelle de fréquences de 20\,Hz à 20\,kHz (ou à la fréquenc
   gauche, en secondes ; pleine échelle de 2 à 32\,s selon la courbe), réglé par Tail et
   Damping ; pendant le gel, la mention \og FROZEN: infinite decay\fg ;
 \item en acier et en tirets, la \textbf{tonalité} de la réverbération (échelle de droite, en
-  dB), réglée par Bandwidth et Low cut.
+  dB), réglée par Bandwidth, Low cut et High cut.
 \end{itemize}
 
 \subsection{Manipuler les boutons}
@@ -208,6 +209,7 @@ Link & oui/non & non & Dry et Reverb liés comme le Blend de l'original \\
 Reverb & off--+6\dB & $-18$\dB & niveau de la réverbération seule \\
 Width & 0--200\,\% & 100\,\% & largeur stéréo de la réverbération \\
 Low cut & 20\,Hz (off)--1\,kHz & off & passe-haut 12\dB/octave sur la réverbération seule \\
+High cut & 1--20\,kHz (off) & off & passe-bas 12\dB/octave sur la réverbération seule \\
 Output & $-24$--+12\dB & 0\dB & gain de toute la sortie \\
 Duck & 0--30\dB & 0 (off) & baisse maximale de la réverbération pendant que l'entrée joue \\
 Threshold & $-60$--0\dBFS & $-30$\dBFS & niveau d'entrée où le ducking commence \\
@@ -284,6 +286,13 @@ laisse telle quelle, 200\,\% double la différence entre les canaux. Le sec n'es
 réverbération seule : il retire le grave qui brouille le bas du mixage sans toucher au son sec.
 Le bouton est logarithmique ; à son minimum (20\,Hz, \og off\fg), le filtre est retiré.
 
+\paragraph{High cut.} Passe-bas de Butterworth du second ordre (12\dB{} par octave) sur la
+réverbération seule : il assombrit la queue sans toucher au son sec. À la différence de
+Bandwidth, qui filtre ce qui entre dans la plaque, il agit sur ce qui en sort, attaque comprise,
+et ne change pas la durée ; à la différence de Damping, l'aigu ne s'éteint pas plus vite, il est
+seulement plus bas. Bouton logarithmique ; à son maximum (20\,kHz, \og off\fg), le filtre est
+retiré.
+
 \paragraph{Output.} Gain de la sortie entière (sec et réverbération), après le mélange.
 
 \paragraph{Duck.} Le \emph{ducking} baisse la réverbération pendant que l'entrée joue et la
@@ -340,7 +349,7 @@ Ducked vocal      & 0,85 & 0,65 & 0,45 & $-14{,}0$ & $-1{,}9$ & 25 & 150 & 110 &
 \end{center}
 Reverb et Dry en dB (le mélange de l'original à Blend 0,30, 0,25, 0,22\ldots), Pre-delay en ms, Low cut en Hz, Width en
 \%, Duck en dB, RT60 à 500\,Hz en secondes (à
-44,1\,kHz) ; Output à 0\dB{} partout, Freeze inactif ; Threshold $-30$\dBFS{} et Attack
+44,1\,kHz) ; Output à 0\dB{} partout, Freeze inactif, High cut off ; Threshold $-30$\dBFS{} et Attack
 10\,ms partout, Release 300\,ms (400\,ms pour Ducked vocal) ; Size 100\,\%, Clear et Link
 éteints partout. \og Original (CAPS)\fg{} reproduit l'original au bit près. Ces
 préréglages ont été réglés d'après les lois des réglages, pas à l'oreille. Ils sont aussi
@@ -387,7 +396,7 @@ lui-même.
 \node[blk, right=of sum] (pre) {Pre-delay};
 \node[blk, right=of pre] (frz) {× entrée\\(Freeze)};
 \node[core, right=of frz] (plate) {plaque\\(original)};
-\node[blk, below=10mm of plate] (lc) {Low cut};
+\node[blk, below=10mm of plate] (lc) {Low cut\\High cut};
 \node[blk, left=of lc] (wd) {Width};
 \node[blk, left=of wd] (dk) {× gain\\Duck};
 \node[blk, left=of dk] (mix) {mélange\\Dry, Reverb};
@@ -552,20 +561,23 @@ Tail, au milieu selon Damping, à droite selon Size.}
 La figure~\ref{fig:rt60} montre les deux rôles : Tail allonge la réverbération à toutes les
 fréquences ; Damping raccourcit surtout l'aigu et laisse le grave presque inchangé.
 
-\subsection{Tonalité : Bandwidth et Low cut}
+\subsection{Tonalité : Bandwidth, Low cut et High cut}
 
 \paragraph{Low cut.} Passe-haut de Butterworth du second ordre (forme de Robert
 Bristow-Johnson, $Q = 1/\sqrt 2$), calculé en double précision, sur les deux canaux de la
 réverbération ; sa fréquence est bornée à $0{,}45\,f_s$. À son minimum, ses coefficients sont
 ceux de l'identité et il est contourné dès que son état s'est vidé : la sortie est alors exactement
 la réverbération non filtrée. La courbe de tonalité de l'interface (figure~\ref{fig:ton}) est le
-produit de la réponse de Bandwidth et de celle d'un Butterworth analogique de même fréquence.
+produit de la réponse de Bandwidth et de celles de Butterworth analogiques de mêmes fréquences.
+
+\paragraph{High cut.} Passe-bas de Butterworth du second ordre, de même forme, après le Low
+cut ; sa fréquence est bornée à $0{,}45\,f_s$. À son maximum, il est contourné de la même façon.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.75\textwidth]{fig_ton.pdf}
-\caption{Réponse du passe-bas d'entrée (Bandwidth) et du coupe-bas de la réverbération (Low
-cut), à 44,1\,kHz.}
+\caption{Réponse du passe-bas d'entrée (Bandwidth), du coupe-bas (Low cut) et du coupe-haut
+(High cut) de la réverbération, à 44,1\,kHz.}
 \label{fig:ton}
 \end{figure}
 
@@ -649,7 +661,7 @@ valeurs : la réverbération gelée décroît alors normalement.
 L'original applique un changement de réglage au bloc audio suivant, d'un coup : tourner Tail ou
 Blend pendant la lecture produit un crépitement (saut de 0,76 sur une sinusoïde d'amplitude
 0,5 quand Blend passe de 0 à 1). Ici, chaque coefficient (Bandwidth, decay, Damping, gains de
-Dry et Reverb, largeur, Output, coefficients du Low cut) va linéairement à sa nouvelle valeur en
+Dry et Reverb, largeur, Output, coefficients du Low cut et du High cut) va linéairement à sa nouvelle valeur en
 20\,ms, puis la prend exactement (même cas, Dry off et Reverb 0\dB{} d'un coup : saut de 0,025). Le Pre-delay change par fondu
 enchaîné de 30\,ms ; un nouveau changement attend la fin du fondu.
 
@@ -660,7 +672,8 @@ continue de tourner pendant le Bypass.
 
 Le code de la plaque est une transcription de celui de CAPS 0.9.26 (classes \texttt{PlateStub},
 \texttt{Delay}, \texttt{LP1}, \texttt{Sine}) qui garde le type de chaque opération (échantillons
-en simple précision, certains produits et sommes en double). Avec Pre-delay 0, Low cut off,
+en simple précision, certains produits et sommes en double). Avec Pre-delay 0, Low cut et High
+cut off,
 Width 100\,\%, Output 0\dB, Size 100\,\%, Duck 0, Clear et Freeze inactifs, pour n'importe
 quelles valeurs de Bandwidth, Damping et Tail (jusqu'à 1), la sortie est \textbf{celle de l'original au bit
 près} en réverbération seule (Reverb 0\dB, Dry off : Blend 1 de l'original) et en son direct

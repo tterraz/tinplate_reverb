@@ -146,7 +146,7 @@ static const Rect kPlot    = { 150, 600, 680, 104 };   // decay time against fre
 // knobs and faders (a fader: cx, cy = centre of its track, r = half its length)
 enum { kKnobPredelay = 0, kKnobBandwidth, kKnobTail, kKnobDamping, kKnobWet, kKnobWidth, kKnobLowCut,
        kKnobOutput, kKnobDuck, kKnobThreshold, kKnobAttack, kKnobRelease, kKnobFloor, kKnobTrigger, kKnobFade,
-       kKnobWindow, kKnobDry, kKnobSize, kNumKnobs };
+       kKnobWindow, kKnobDry, kKnobSize, kKnobHighCut, kNumKnobs };
 
 struct KnobDef {
     int param;
@@ -155,7 +155,7 @@ struct KnobDef {
     const char* help;
 };
 
-static const KnobDef kKnobs[kNumKnobs] = {
+static constexpr KnobDef kKnobs[kNumKnobs] = {
     { kParamPredelay,  130.0f, 162.0f, 44.0f, "PRE-DELAY",
       "Delay before the plate: separates the reverb from the direct sound (clearer vocals). "
       "A change crossfades in 30 ms." },
@@ -171,9 +171,9 @@ static const KnobDef kKnobs[kNumKnobs] = {
     { kParamWet,       797.0f, 215.0f, 95.0f, "REVERB",
       "Level of the reverb alone, dB (at the bottom: off). Reverb at 0 dB and Dry off: reverb only "
       "(for a send)." },
-    { kParamWidth,     675.0f, 160.0f, 24.0f, "WIDTH",
+    { kParamWidth,     675.0f, 128.0f, 18.0f, "WIDTH",
       "Stereo width of the reverb: 0 % mono, 100 % as the plate gives it, 200 % side doubled." },
-    { kParamLowCut,    675.0f, 288.0f, 24.0f, "LOW CUT",
+    { kParamLowCut,    675.0f, 213.0f, 18.0f, "LOW CUT",
       "High-pass on the reverb only (12 dB / octave): keeps the low end of the mix clear. "
       "At the minimum: off." },
     { kParamOutput,    849.0f, 215.0f, 95.0f, "OUTPUT",
@@ -201,12 +201,28 @@ static const KnobDef kKnobs[kNumKnobs] = {
     { kParamWindow,    838.0f, 520.0f, 20.0f, "WINDOW",
       "Clear: longest time for the input to go from Floor to Trigger to count as an attack. "
       "Short: only sharp attacks (drums, plucks); long: softer ones too." },
+    { kParamDry,       745.0f, 215.0f, 95.0f, "DRY",
+      "Level of the dry signal, dB (at the bottom: off). Not delayed: no latency." },
     { kParamSize,      555.0f, 330.0f, 18.0f, "SIZE",
       "Size of the plate: lengths of its delays, 50 to 200 % (100 %: the original). Larger: deeper, "
       "denser and longer (the decay grows with the size). A change glides in 100 ms (brief pitch glide)." },
-    { kParamDry,       745.0f, 215.0f, 95.0f, "DRY",
-      "Level of the dry signal, dB (at the bottom: off). Not delayed: no latency." },
+    { kParamHighCut,   675.0f, 298.0f, 18.0f, "HIGH CUT",
+      "Low-pass on the reverb only (12 dB / octave): a darker tail, the attack and the dry sound "
+      "untouched. At the maximum: off." },
 };
+
+// kKnobs follows the order of the enum above
+static_assert(kKnobs[kKnobPredelay].param == kParamPredelay && kKnobs[kKnobBandwidth].param == kParamBandwidth
+              && kKnobs[kKnobTail].param == kParamTail && kKnobs[kKnobDamping].param == kParamDamping
+              && kKnobs[kKnobWet].param == kParamWet && kKnobs[kKnobWidth].param == kParamWidth
+              && kKnobs[kKnobLowCut].param == kParamLowCut && kKnobs[kKnobOutput].param == kParamOutput
+              && kKnobs[kKnobDuck].param == kParamDuck && kKnobs[kKnobThreshold].param == kParamThreshold
+              && kKnobs[kKnobAttack].param == kParamAttack && kKnobs[kKnobRelease].param == kParamRelease
+              && kKnobs[kKnobFloor].param == kParamFloor && kKnobs[kKnobTrigger].param == kParamTrigger
+              && kKnobs[kKnobFade].param == kParamFade && kKnobs[kKnobWindow].param == kParamWindow
+              && kKnobs[kKnobDry].param == kParamDry && kKnobs[kKnobSize].param == kParamSize
+              && kKnobs[kKnobHighCut].param == kParamHighCut,
+              "kKnobs: one entry per knob, in the order of the enum");
 
 static const Rect kFreeze  = { 300, 318, 110, 30 };
 static const Rect kRt      = { 270, 360, 330, 80 };    // decay time readout
@@ -725,7 +741,7 @@ private:
 
     static bool logarithmic(const int p)
     {
-        return p == kParamLowCut || p == kParamAttack || p == kParamRelease || p == kParamFade
+        return p == kParamLowCut || p == kParamHighCut || p == kParamAttack || p == kParamRelease || p == kParamFade
             || p == kParamWindow;
     }
 
@@ -1219,7 +1235,7 @@ private:
         const char* fmt = "%.1f";
         if (p <= kParamDamping)
             fmt = "%.3f";
-        else if (p == kParamPredelay || p == kParamLowCut || p == kParamWidth || p == kParamSize || p == kParamThreshold
+        else if (p == kParamPredelay || p == kParamLowCut || p == kParamHighCut || p == kParamWidth || p == kParamSize || p == kParamThreshold
                  || p == kParamRelease || p == kParamFloor || p == kParamTrigger || p == kParamFade
                  || p == kParamWindow)
             fmt = "%.0f";
@@ -1275,6 +1291,12 @@ private:
                 std::snprintf(buf, size, "%+.1f dB", v);
             break;
         case kParamPredelay: std::snprintf(buf, size, "%.0f ms", v); break;
+        case kParamHighCut:
+            if (v >= kHighCutOff - 0.5f)
+                std::snprintf(buf, size, "off");
+            else
+                std::snprintf(buf, size, "%.1f kHz", v * 0.001f);
+            break;
         case kParamLowCut:
             if (v <= kLowCutOff + 0.05f)
                 std::snprintf(buf, size, "off");
@@ -1583,6 +1605,7 @@ private:
         sectionTitle(kSecOut, "3", "OUTPUT", "mix and level");
         drawKnob(kKnobWidth);
         drawKnob(kKnobLowCut);
+        drawKnob(kKnobHighCut);
         // scale of the dry and reverb faders, between them and the knobs
         const KnobDef& f = kKnobs[kKnobDry];
         const float marks[] = { 6.0f, 0.0f, -12.0f, -24.0f, -40.0f, -60.0f };
@@ -1916,7 +1939,7 @@ private:
         meterBar(2, "OUT", fValues[kParamMeterOut]);
     }
 
-    // tone of the wet signal, dB: bandwidth low-pass and low cut (2nd-order Butterworth)
+    // tone of the wet signal, dB: bandwidth low-pass, low and high cut (2nd-order Butterworth)
     double toneDb(const double hz) const
     {
         const double sr = sampleRate();
@@ -1927,6 +1950,12 @@ private:
         {
             const double r4 = std::pow(hz / lc, 4.0);
             g *= std::sqrt(r4 / (1.0 + r4));
+        }
+        const float hc = fValues[kParamHighCut];
+        if (hc < kHighCutOff)
+        {
+            const double r4 = std::pow(hz / std::fmin(hc, 0.45 * sr), 4.0);
+            g *= std::sqrt(1.0 / (1.0 + r4));
         }
         return 20.0 * std::log10(std::fmax(g, 1e-6));
     }

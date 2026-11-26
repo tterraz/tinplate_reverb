@@ -14,13 +14,14 @@
  *
  * Signal flow:
  *   x = (L + R + normal) / 2 -> pre-delay -> x input gain (freeze) -> plate tank
- *     -> low cut -> width -> x ducking gain -> wet;
+ *     -> low cut -> high cut -> width -> x ducking gain -> wet;
  *   out = wet x wet level + dry x dry level -> output gain -> bypass crossfade
  *   (levels in dB, -60 = off; CAPS has a blend instead: wet level blend^1.53, dry 1 - that;
  *   Link: the level changed last, by the interface or the host, sets the other one so that
  *   the gains add up to 1, as the blend; when linking, the dry level leads)
  *
- * With pre-delay 0, low cut off, width 100 %, output 0 dB, freeze, ducking and clear off, and
+ * With pre-delay 0, low and high cut off, size and width 100 %, output 0 dB, freeze, ducking and
+ * clear off, and
  * wet only (wet 0 dB, dry off) or dry only, the output is that of the original with blend 1 or
  * 0, sample for sample, for any values of bandwidth, tail (up to 1) and damping, when the
  * controls stay still (tests/test_dsp.cpp, against the original code).  Other mixes: the gains
@@ -141,16 +142,18 @@ struct Ramp
     }
 };
 
-// 2nd-order Butterworth high-pass (RBJ), transposed direct form II in double.  Off: identity
-// coefficients, so the output is the input exactly once the state has emptied (two samples).
-struct LowCut
+// 2nd-order Butterworth high-pass (low cut) or low-pass (high cut) (RBJ), transposed direct form
+// II in double.  Off: identity coefficients, so the output is the input exactly once the state
+// has emptied (two samples).
+struct Cut2
 {
+    bool lowpass = false;
     Ramp<double> c[5];   // b0, b1, b2, a1, a2
     double z1[2] = { 0, 0 }, z2[2] = { 0, 0 };
 
-    static void coefficients(const float hz, const double fs, double k[5])
+    void coefficients(const float hz, const double fs, double k[5]) const
     {
-        if (hz <= kLowCutOff)
+        if (lowpass ? hz >= kHighCutOff : hz <= kLowCutOff)
         {
             k[0] = 1.0;
             k[1] = k[2] = k[3] = k[4] = 0.0;
@@ -159,8 +162,9 @@ struct LowCut
         const double w = 2.0 * M_PI * std::fmin(hz, 0.45 * fs) / fs;
         const double cw = std::cos(w), alpha = std::sin(w) / (2.0 * M_SQRT1_2);
         const double a0 = 1.0 + alpha;
-        k[0] = (1.0 + cw) * 0.5 / a0;
-        k[1] = -(1.0 + cw) / a0;
+        const double b = lowpass ? (1.0 - cw) : (1.0 + cw);
+        k[0] = b * 0.5 / a0;
+        k[1] = (lowpass ? b : -b) / a0;
         k[2] = k[0];
         k[3] = -2.0 * cw / a0;
         k[4] = (1.0 - alpha) / a0;
@@ -212,6 +216,7 @@ public:
     TinplatePlugin()
         : Plugin(kParamCount, kTinplatePresetCount, kStateCount)
     {
+        fHighCut.lowpass = true;
         for (uint32_t i = 0; i < kParamCount; ++i)
             fParams[i] = kTinplateRanges[i].def;
         allocate();
@@ -257,6 +262,10 @@ protected:
         case kParamPredelay:  set(p, "Pre-delay", "predelay", "ms"); break;
         case kParamLowCut:
             set(p, "Low cut", "lowcut", "Hz");
+            p.hints |= kParameterIsLogarithmic;
+            break;
+        case kParamHighCut:
+            set(p, "High cut", "highcut", "Hz");
             p.hints |= kParameterIsLogarithmic;
             break;
         case kParamWidth:     set(p, "Width", "width", "%"); break;
@@ -437,6 +446,8 @@ protected:
 
             if (!fLowCut.identity())
                 fLowCut.process(wl, wr);
+            if (!fHighCut.identity())
+                fHighCut.process(wl, wr);
             if (fWidth.moving() || fWidth.cur != 1.0f)
             {
                 const float w = fWidth.next();
@@ -551,6 +562,7 @@ private:
         fGain.set(fParams[kParamOutput] == 0.0f ? 1.0f : dbToGain(fParams[kParamOutput]), n);
         fBypass.set(fParams[kParamBypass] > 0.5f ? 1.0f : 0.0f, ramp ? static_cast<int>(0.01 * sr) : 0);
         fLowCut.set(fParams[kParamLowCut], sr, n);
+        fHighCut.set(fParams[kParamHighCut], sr, n);
         // size: the lengths glide in 100 ms (pitch glide), taken at once when not ramping
         for (PlateCore::Plate& p : fPlate)
             p.setSize(fParams[kParamSize] * 0.01f, ramp ? static_cast<int>(0.1 * sr) : 0);
@@ -671,6 +683,7 @@ private:
         fGain.reset(0.0f);
         fBypass.reset(0.0f);
         fLowCut.reset(fParams[kParamLowCut], getSampleRate());
+        fHighCut.reset(fParams[kParamHighCut], getSampleRate());
         std::fill(fPre.begin(), fPre.end(), 0.0f);
         fPrePos = 0;
         fRamp = false;
@@ -687,7 +700,7 @@ private:
     float fNormal = 1e-20f;        // NOISE_FLOOR of CAPS
     bool fRamp = false;
     Ramp<float> fBandwidth, fDecay, fDamping, fInGain, fModulation, fWet, fDry, fWidth, fGain, fBypass;
-    LowCut fLowCut;
+    Cut2 fLowCut, fHighCut;
     std::vector<float> fPre;
     unsigned fPreMask = 0, fPrePos = 0, fPreCur = 0, fPreNext = 0;
     int fPreFade = 0, fPreFadeLength = 1;

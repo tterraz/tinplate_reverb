@@ -65,6 +65,7 @@ Différences voulues avec l'original :
 | Dry, Reverb | (1.1.0, à la place de Blend) faders des niveaux du sec et de la réverbération seule, off (-60) à +6 dB ; loi de position par morceaux (off, -40, -24, -12, 0, +6 dB à 0, 0,15, 0,35, 0,55, 0,82, 1) |
 | Width | largeur stéréo de la réverbération (0 % mono, 200 % côté doublé) |
 | Low cut | passe-haut à 12 dB/octave sur la réverbération seule, 20 Hz (off) à 1 kHz, bouton logarithmique |
+| High cut | (point A d'`AMELIORATIONS.md`) passe-bas à 12 dB/octave sur la réverbération seule, après Low cut, 1 kHz à 20 kHz (off), logarithmique ; même structure que Low cut (`Cut2`, RBJ en double, contourné à off) ; test 4 (8 kHz : -38 dB pour 1 kHz) |
 | Output | gain de toute la sortie, -24..+12 dB (fader depuis 1.1.0) |
 | Link | (1.1.0) icône chaîne (liée, dorée) / chaîne brisée au-dessus des faders ; paramètre `link` appliqué par le DSP (l'automation le suit) : gains dry + reverb = 1 (le Blend de l'original), le meneur ≤ 0 dB ; meneur = dernier des deux niveaux reçus par `setParameterValue` (fenêtre ou hôte), Dry quand on lie (`fLinkLeader`, `TinplateLaw::linkedDb`) ; la fenêtre affiche le même calcul et, à la souris, écrit les deux paramètres ; dans les préréglages et A/B (test 13) |
 | Bypass | paramètre Bypass déclaré à l'hôte, fondu de 10 ms |
@@ -128,7 +129,7 @@ Préréglages de l'utilisateur : comme Brimstone (voir « Interface »).
 ## Interface
 900 × 730 (600 en 1.0.0), redimensionnable (proportions gardées), HiDPI. Trois sections numérotées dans l'ordre
 du signal : **1 INPUT** (Pre-delay, Bandwidth), **2 PLATE** (Tail, Damping, Freeze, RT60 à
-500 Hz, 125 Hz et 4 kHz ; Tail et Damping grisés pendant le gel), **3 OUTPUT** (Width, Low cut ;
+500 Hz, 125 Hz et 4 kHz ; Tail et Damping grisés pendant le gel), **3 OUTPUT** (Width, Low cut, High cut ;
 faders DRY, REVERB, OUTPUT ; vu-mètres IN, REVERB, OUT). Dessous, la bande **4 DUCKING** (Duck, Threshold,
 Attack, Release, grisés sauf Duck quand Duck = 0 ; vu-mètre CUT 0-30 dB) et **5 CLEAR** (bouton,
 état waiting/ARMED/CLEARED, Floor, Trigger, Fade, Window grisés si éteint). En bas : **temps de
