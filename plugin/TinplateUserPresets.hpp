@@ -40,9 +40,10 @@ namespace TinplateUserPresets {
 
 static const size_t kMaxNameLength = 24;
 
-// file keys of the preset parameters kParamBandwidth .. kParamOutput (symbols of the parameters)
+// file keys of the preset parameters kPresetParams (symbols of the parameters)
 static const char* const kUserPresetKeys[kPresetParamCount] = {
     "bandwidth", "tail", "damping", "blend", "predelay", "lowcut", "width", "output",
+    "duck", "threshold", "attack", "release",
 };
 
 static inline bool validName(const std::string& name)
@@ -224,7 +225,7 @@ static inline bool load(const std::string& name, float values[kPresetParamCount]
     if (f == nullptr)
         return false;
     for (int i = 0; i < kPresetParamCount; ++i)
-        values[i] = kTinplateRanges[i].def;
+        values[i] = kTinplateRanges[kPresetParams[i]].def;
     char line[256];
     while (std::fgets(line, sizeof(line), f) != nullptr)
     {
@@ -242,7 +243,10 @@ static inline bool load(const std::string& name, float values[kPresetParamCount]
             float v = 0.0f;
             in >> v;
             if (!in.fail() && (in.eof() || in.peek() == std::char_traits<char>::eof()) && std::isfinite(v))
-                values[i] = std::fmin(std::fmax(v, kTinplateRanges[i].min), kTinplateRanges[i].max);
+            {
+                const TinplateRange& r = kTinplateRanges[kPresetParams[i]];
+                values[i] = std::fmin(std::fmax(v, r.min), r.max);
+            }
         }
     }
     std::fclose(f);

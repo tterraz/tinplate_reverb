@@ -31,7 +31,7 @@ static inline double seconds(const float tail, const float damping, const double
     };
     int it, id, jf;
     double wt, wd, wf;
-    split(tail * (kTails - 1), kTails - 1, it, wt);
+    split(tail / kTailStep, kTails - 1, it, wt);
     split(damping * (kDampings - 1), kDampings - 1, id, wd);
     split(std::log2(f * 44100.0 / fs / kFirstHz), kFreqs - 1, jf, wf);
     double v = 0.0;

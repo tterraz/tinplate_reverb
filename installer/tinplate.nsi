@@ -7,7 +7,7 @@ Unicode true
 !include "x64.nsh"
 
 !define NAME     "Tinplate Reverb"
-!define VERSION  "1.0.0"
+!define VERSION  "1.1.0"
 !define BUNDLE   "tinplate_reverb"
 !define MANUAL   "Tinplate-Reverb-manuel.pdf"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\TinplateReverb"

@@ -14,8 +14,8 @@
  *
  * Signal flow:
  *   x = (L + R + normal) / 2 -> pre-delay -> x input gain (freeze) -> plate tank
- *     -> low cut -> width -> wet;  out = wet x blend^1.53 + dry x (1 - blend^1.53)
- *     -> output gain -> bypass crossfade
+ *     -> low cut -> width -> x ducking gain -> wet;
+ *   out = wet x blend^1.53 + dry x (1 - blend^1.53) -> output gain -> bypass crossfade
  *
  * With pre-delay 0, low cut off, width 100 %, output 0 dB, freeze off (preset "Original
  * (CAPS)" and any values of the four controls), the output is that of the original, sample for
@@ -32,6 +32,13 @@
  * delays only and keeps its energy at every frequency (with the modulation, the linear
  * interpolation of the modulated delays loses 11 dB at 8 kHz in 10 s).  The dry signal still
  * passes.
+ *
+ * Ducking (1.1.0): the reverb is lowered while the input plays.  Detector: input peak
+ * max(|L|, |R|) of each sample, before the pre-delay; cut = as many dB as it goes over the
+ * threshold, at most the depth (TinplateParams.hpp); smoothed in dB by a one-pole filter, attack
+ * when the cut grows, release when it shrinks.  Depth 0 and the cut back under 1e-3 dB: the
+ * gain is not applied at all (output to the bit as without ducking).  Freeze: the frozen tail is
+ * ducked too.
  *
  * Pre-delay: integer delay in samples; a change crossfades from the old to the new delay in
  * 30 ms (no pitch glide), the next change waits for the end of the crossfade.
@@ -198,11 +205,11 @@ protected:
     const char* getDescription() const override
     {
         return "Plate reverb after CAPS PlateX2 (Plate2x2) by Tim Goetze: Dattorro's plate, "
-               "with pre-delay, low cut, width and freeze.";
+               "with pre-delay, low cut, width, freeze and ducking.";
     }
     const char* getMaker() const override { return "Tinplate"; }
     const char* getLicense() const override { return "GPL-3.0-or-later"; }
-    uint32_t getVersion() const override { return d_version(1, 0, 0); }
+    uint32_t getVersion() const override { return d_version(1, 1, 0); }
 
     void initParameter(const uint32_t index, Parameter& p) override
     {
@@ -237,6 +244,22 @@ protected:
         case kParamMeterIn:  output(p, "Input level", "meter_in", "dB"); break;
         case kParamMeterWet: output(p, "Reverb level", "meter_wet", "dB"); break;
         case kParamMeterOut: output(p, "Output level", "meter_out", "dB"); break;
+        case kParamDuck:      set(p, "Duck", "duck", "dB"); break;
+        case kParamThreshold: set(p, "Duck threshold", "threshold", "dB"); break;
+        case kParamAttack:
+            set(p, "Duck attack", "attack", "ms");
+            p.hints |= kParameterIsLogarithmic;
+            break;
+        case kParamRelease:
+            set(p, "Duck release", "release", "ms");
+            p.hints |= kParameterIsLogarithmic;
+            break;
+        case kParamMeterDuck:
+            output(p, "Duck cut", "meter_duck", "dB");
+            p.ranges.min = 0.0f;
+            p.ranges.max = 30.0f;
+            p.ranges.def = 0.0f;
+            break;
         }
     }
 
@@ -276,7 +299,7 @@ protected:
         if (index >= static_cast<uint32_t>(kTinplatePresetCount))
             return;
         for (int i = 0; i < kPresetParamCount; ++i)
-            fParams[i] = kTinplatePresets[index].values[i];
+            fParams[kPresetParams[i]] = kTinplatePresets[index].values[i];
     }
 
     float getParameterValue(const uint32_t index) const override
@@ -312,7 +335,7 @@ protected:
         const float* const inR = inputs[1];
         float* const outL = outputs[0];
         float* const outR = outputs[1];
-        float peakIn = 0.0f, peakWet = 0.0f, peakOut = 0.0f;
+        float peakIn = 0.0f, peakWet = 0.0f, peakOut = 0.0f, peakDuck = 0.0f;
 
         for (uint32_t i = 0; i < frames; ++i)
         {
@@ -339,6 +362,13 @@ protected:
                 const float m = (wl + wr) * 0.5f, s = (wl - wr) * 0.5f * w;
                 wl = m + s;
                 wr = m - s;
+            }
+            if (fDuckDepth > 0.0f || fDuckDb > 0.0f)
+            {
+                const float g = duckGain(std::fmax(std::fabs(sl), std::fabs(sr)));
+                wl *= g;
+                wr *= g;
+                peakDuck = std::fmax(peakDuck, fDuckDb);
             }
             peakWet = std::fmax(peakWet, std::fmax(std::fabs(wl), std::fabs(wr)));
 
@@ -374,6 +404,7 @@ protected:
         fParams[kParamMeterIn] = gainToDb(fMeterIn, -60.0f);
         fParams[kParamMeterWet] = gainToDb(fMeterWet, -60.0f);
         fParams[kParamMeterOut] = gainToDb(fMeterOut, -60.0f);
+        fParams[kParamMeterDuck] = peakDuck;
     }
 
 private:
@@ -421,6 +452,12 @@ private:
         fGain.set(fParams[kParamOutput] == 0.0f ? 1.0f : dbToGain(fParams[kParamOutput]), n);
         fBypass.set(fParams[kParamBypass] > 0.5f ? 1.0f : 0.0f, ramp ? static_cast<int>(0.01 * sr) : 0);
         fLowCut.set(fParams[kParamLowCut], sr, n);
+        // ducking: no ramp, the cut is smoothed by the attack and release themselves
+        fDuckDepth = fParams[kParamDuck];
+        fDuckThresholdDb = fParams[kParamThreshold];
+        fDuckThreshold = std::pow(10.0f, fDuckThresholdDb * 0.05f);
+        fDuckAttack = std::exp(-1000.0 / (std::fmax(fParams[kParamAttack], 0.01f) * sr));
+        fDuckRelease = std::exp(-1000.0 / (std::fmax(fParams[kParamRelease], 0.01f) * sr));
 
         const unsigned pd = static_cast<unsigned>(std::lround(fParams[kParamPredelay] * 1e-3 * sr));
         if (!ramp)
@@ -439,6 +476,19 @@ private:
             fPlate.setDamping(fDamping.cur);
             fPlate.setModulation(fModulation.cur);
         }
+    }
+
+    // gain of the reverb for an input peak; follows the cut fDuckDb
+    float duckGain(const float peak)
+    {
+        const float target = peak > fDuckThreshold
+                           ? TinplateDuck::targetDb(8.6858896f * std::log(peak), fDuckThresholdDb, fDuckDepth)
+                           : 0.0f;
+        const float a = target > fDuckDb ? fDuckAttack : fDuckRelease;
+        fDuckDb = target + a * (fDuckDb - target);
+        if (target == 0.0f && fDuckDb < 1e-3f)
+            fDuckDb = 0.0f;
+        return fDuckDb > 0.0f ? std::exp(-0.11512925f * fDuckDb) : 1.0f;
     }
 
     float preDelay(const float x)
@@ -475,6 +525,7 @@ private:
         setTargets(false);
         fRamp = true;
         fMeterIn = fMeterWet = fMeterOut = 0.0f;
+        fDuckDb = 0.0f;
     }
 
     float fParams[kParamCount];
@@ -489,6 +540,8 @@ private:
     unsigned fPreMask = 0, fPrePos = 0, fPreCur = 0, fPreNext = 0;
     int fPreFade = 0, fPreFadeLength = 1;
     float fMeterIn = 0.0f, fMeterWet = 0.0f, fMeterOut = 0.0f;
+    float fDuckDepth = 0.0f, fDuckThresholdDb = 0.0f, fDuckThreshold = 1.0f, fDuckDb = 0.0f;
+    float fDuckAttack = 0.0f, fDuckRelease = 0.0f;   // one-pole coefficients
 
     DISTRHO_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TinplatePlugin)
 };

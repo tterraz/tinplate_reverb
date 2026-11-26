@@ -48,12 +48,13 @@ int main()
     check(!save("Default", kTinplatePresets[0].values) && !save("vocal PLATE", kTinplatePresets[0].values),
           "factory names refused");
 
-    const float a[kPresetParamCount] = { 0.8123457f, 0.55f, 0.3f, 0.27f, 37.5f, 143.7f, 125.0f, -1.75f };
+    const float a[kPresetParamCount] = { 0.8123457f, 0.55f, 0.3f, 0.27f, 37.5f, 143.7f, 125.0f, -1.75f,
+                                         9.5f, -27.25f, 3.3f, 812.0f };
     check(save("Bright", a), "save");
     float r[kPresetParamCount] = { 0 };
     check(load("Bright", r) && sameValues(a, r), "read back exactly");
 
-    const float b[kPresetParamCount] = { 0, 0, 0, 0, 0, 20, 0, -24 };
+    const float b[kPresetParamCount] = { 0, 0, 0, 0, 0, 20, 0, -24, 0, -60, 1, 50 };
     check(save("aggressive", b) && save("Calm", kTinplatePresets[2].values), "save two more");
     const std::vector<std::string> names = list();
     check(names.size() == 3 && names[0] == "aggressive" && names[1] == "Bright" && names[2] == "Calm",
@@ -77,8 +78,22 @@ int main()
     bool ok = load("Hand", r) && r[kParamLowCut] == 1000.0f && r[kParamWidth] == 40.5f;
     for (int i = 0; i < kPresetParamCount; ++i)
         if (i != kParamLowCut && i != kParamWidth)
-            ok = ok && r[i] == kTinplateRanges[i].def;
+            ok = ok && r[i] == kTinplateRanges[kPresetParams[i]].def;
     check(ok, "missing keys: default, unknown lines ignored, clamped");
+
+    // preset of 1.0.0 (no ducking keys): ducking at its defaults, off
+    std::FILE* const v1 = openPreset("Old", true);
+    if (v1 != nullptr)
+    {
+        std::fputs("# Tinplate Reverb preset\nversion=1\nbandwidth=0.8\ntail=0.6\ndamping=0.4\nblend=0.3\n"
+                   "predelay=12\nlowcut=60\nwidth=100\noutput=0\n", v1);
+        std::fclose(v1);
+    }
+    ok = load("Old", r) && r[1] == 0.6f;
+    for (int i = kPresetParamCountV1; i < kPresetParamCount; ++i)
+        ok = ok && r[i] == kTinplateRanges[kPresetParams[i]].def;
+    check(ok && r[8] == 0.0f, "preset of 1.0.0: ducking keys at their default (off)");
+    check(erase("Old"), "delete it");
 
     // files that are not presets are not listed
 #ifdef _WIN32

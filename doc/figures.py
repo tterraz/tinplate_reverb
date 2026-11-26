@@ -81,10 +81,12 @@ def rt60_table():
     text = open(os.path.join(ROOT, "plugin", "Rt60Table.hpp")).read()
     body = text[text.index("kSeconds"):]
     values = [float(v) for v in re.findall(r"(\d+\.\d+)f", body)]
-    return np.array(values).reshape(11, 9, 9)
+    tails = int(re.search(r"kTails = (\d+)", text).group(1))
+    step = float(re.search(r"kTailStep = ([0-9.]+)", text).group(1))
+    return np.array(values).reshape(tails, 9, 9), step
 
 
-TABLE = rt60_table()
+TABLE, TAIL_STEP = rt60_table()
 
 
 def rt60(tail, damping, f, fs=44100.0):
@@ -94,7 +96,7 @@ def rt60(tail, damping, f, fs=44100.0):
         i = np.minimum(np.floor(x).astype(int), last - 1)
         return i, x - i
     f = np.asarray(f, dtype=float)
-    it, wt = split(np.full_like(f, tail * 10), 10)
+    it, wt = split(np.full_like(f, tail / TAIL_STEP), TABLE.shape[0] - 1)
     idd, wd = split(np.full_like(f, damping * 8), 8)
     jf, wf = split(np.log2(f * 44100.0 / fs / 62.5), 8)
     v = np.zeros_like(f)
@@ -150,8 +152,8 @@ def fig_rt60():
     f = np.geomspace(62.5, 16000.0, 200)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.6, 3.0), sharey=True)
     cmap = plt.get_cmap("copper")
-    for i, t in enumerate((0.0, 0.2, 0.4, 0.6, 0.8, 1.0)):
-        ax1.semilogx(f, rt60(t, 0.4, f), color=cmap(0.15 + 0.7 * i / 5), label="Tail %.1f" % t)
+    for i, t in enumerate((0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.16)):
+        ax1.semilogx(f, rt60(t, 0.4, f), color=cmap(0.15 + 0.7 * i / 6), label="Tail %g" % t)
     ax1.set_title("Damping 0,4", fontsize=9)
     for i, d in enumerate((0.0, 0.25, 0.5, 0.75, 1.0)):
         ax2.semilogx(f, rt60(0.6, d, f), color=plt.get_cmap("Blues")(0.35 + 0.6 * i / 4), label="Damping %.2f" % d)
@@ -196,6 +198,41 @@ def fig_reponse():
     save(fig, "fig_reponse.pdf")
 
 
+def duck_cut(x, fs, threshold, depth, attack_ms, release_ms):
+    """Cut of the reverb (dB) by the ducking, sample by sample, as TinplatePlugin.cpp."""
+    aa = np.exp(-1000.0 / (attack_ms * fs))
+    ar = np.exp(-1000.0 / (release_ms * fs))
+    level = db(x)
+    target = np.clip(level - threshold, 0.0, depth)
+    y, out = 0.0, np.zeros_like(x)
+    for i, t in enumerate(target):
+        y = t + (aa if t > y else ar) * (y - t)
+        if t == 0.0 and y < 1e-3:
+            y = 0.0
+        out[i] = y
+    return out
+
+
+def fig_duck():
+    fs = 44100.0
+    t = np.arange(int(3.0 * fs)) / fs
+    # three phrases of a 220 Hz tone at -6 dBFS peak, with gaps of 0.1, 0.4 and 1 s
+    on = ((t >= 0.1) & (t < 0.7)) | ((t >= 0.8) & (t < 1.4)) | ((t >= 1.8) & (t < 2.0))
+    x = np.where(on, 0.5 * np.sin(2.0 * np.pi * 220.0 * t), 0.0)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.0, 3.8), sharex=True, gridspec_kw={"height_ratios": [1, 1.6]})
+    ax1.plot(t, x, color=GREY, lw=0.4)
+    ax1.set_ylabel("entrée")
+    ax1.set_ylim(-0.6, 0.6)
+    for rel, col in ((100.0, STEEL), (400.0, BRASS), (1500.0, RUST)):
+        ax2.plot(t, -duck_cut(x, fs, -30.0, 12.0, 10.0, rel), color=col, label="Release %g ms" % rel)
+    ax2.set_ylabel("gain de la réverbération (dB)")
+    ax2.set_xlabel("temps (s)")
+    ax2.set_ylim(-13, 1)
+    ax2.legend(fontsize=7.5, loc="lower right")
+    ax2.set_title("Duck 12 dB, Threshold -30 dBFS, Attack 10 ms ; entrée à -6 dBFS", fontsize=9)
+    save(fig, "fig_duck.pdf")
+
+
 def fig_ton():
     fs = 44100.0
     f = np.geomspace(20.0, 20000.0, 400)
@@ -217,3 +254,4 @@ if __name__ == "__main__":
     fig_rt60()
     fig_reponse()
     fig_ton()
+    fig_duck()

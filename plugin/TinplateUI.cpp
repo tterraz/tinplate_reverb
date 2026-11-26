@@ -4,11 +4,12 @@
  * Copyright (C) 2026 Tinplate authors
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Everything is drawn in a logical 900 x 600 space, scaled to the window size (resizable,
+ * Everything is drawn in a logical 900 x 730 space, scaled to the window size (resizable,
  * aspect ratio kept).  Three sections, left to right in the order of the signal:
  *   1 INPUT (pre-delay, bandwidth) -> 2 PLATE (tail, damping, freeze, decay time)
  *   -> 3 OUTPUT (blend, width, low cut, output, meters),
- * and below, the decay time (RT60) of the plate against frequency with the tone of the wet
+ * below them the DUCKING band (duck, threshold, attack, release, cut meter),
+ * and at the bottom the decay time (RT60) of the plate against frequency with the tone of the wet
  * signal (bandwidth and low cut).
  * Knobs: drag vertically (Shift = fine), mouse wheel, double-click or Ctrl+click = default,
  * right-click = type a value (Enter / Escape).  Every control has a tooltip.
@@ -42,7 +43,7 @@ START_NAMESPACE_DISTRHO
 using DGL_NAMESPACE::Color;
 
 static const float kW = 900.0f;
-static const float kH = 600.0f;
+static const float kH = 730.0f;
 static const float kPi = 3.14159265358979f;
 static const float kArcStart = 0.75f * kPi;
 static const float kArcSweep = 1.5f * kPi;
@@ -136,11 +137,12 @@ struct Rect {
 static const Rect kSecIn   = { 20, 70, 220, 380 };
 static const Rect kSecTank = { 250, 70, 370, 380 };
 static const Rect kSecOut  = { 630, 70, 250, 380 };
-static const Rect kDecay   = { 20, 460, 860, 128 };
-static const Rect kPlot    = { 150, 468, 680, 104 };   // decay time against frequency
+static const Rect kSecDuck = { 20, 460, 860, 122 };
+static const Rect kDecay   = { 20, 592, 860, 128 };
+static const Rect kPlot    = { 150, 600, 680, 104 };   // decay time against frequency
 
 enum { kKnobPredelay = 0, kKnobBandwidth, kKnobTail, kKnobDamping, kKnobBlend, kKnobWidth, kKnobLowCut,
-       kKnobOutput, kNumKnobs };
+       kKnobOutput, kKnobDuck, kKnobThreshold, kKnobAttack, kKnobRelease, kNumKnobs };
 
 struct KnobDef {
     int param;
@@ -157,8 +159,8 @@ static const KnobDef kKnobs[kNumKnobs] = {
       "Low-pass at the input of the plate (control of the original). Low: darker, softer onset. "
       "Shown: its -3 dB frequency at this sample rate." },
     { kParamTail,      360.0f, 165.0f, 50.0f, "TAIL",
-      "Length of the reverb: gain of the loop of the plate (control of the original). Shown: the "
-      "decay time at 500 Hz, measured on the plate." },
+      "Length of the reverb: gain of the loop of the plate (control of the original, 0 to 1; "
+      "same law up to 1.16: 10 s at 500 Hz). Shown: the decay time at 500 Hz, measured on the plate." },
     { kParamDamping,   510.0f, 165.0f, 50.0f, "DAMPING",
       "Low-pass inside the loop (control of the original): the highs die sooner than the lows. "
       "Shown: its -3 dB frequency at this sample rate." },
@@ -172,6 +174,17 @@ static const KnobDef kKnobs[kNumKnobs] = {
       "At the minimum: off." },
     { kParamOutput,    818.0f, 278.0f, 26.0f, "OUTPUT",
       "Gain of the whole output, dry and wet." },
+    { kParamDuck,      380.0f, 520.0f, 24.0f, "DUCK",
+      "Ducking: the reverb is lowered while the input plays and comes back in the gaps "
+      "(clearer vocals). Largest cut of the reverb, dB. At 0: off." },
+    { kParamThreshold, 500.0f, 520.0f, 24.0f, "THRESHOLD",
+      "Input peak level where the ducking starts: the reverb is cut by as many dB as the input "
+      "goes over it, at most the Duck depth." },
+    { kParamAttack,    620.0f, 520.0f, 24.0f, "ATTACK",
+      "How fast the reverb goes down when the input comes in." },
+    { kParamRelease,   740.0f, 520.0f, 24.0f, "RELEASE",
+      "How fast the reverb comes back when the input stops: short, it swells in every gap; "
+      "long, it comes back at the end of the phrase." },
 };
 
 static const Rect kFreeze  = { 380, 318, 110, 30 };
@@ -197,11 +210,12 @@ static const Rect kBypass  = { 768, 14, 108, 30 };
 // meters: three horizontal bars in the output section
 static const float kMeterX = 690.0f, kMeterW = 132.0f, kMeterH = 9.0f;
 static const float kMeterY[3] = { 384.0f, 404.0f, 424.0f };   // IN, REVERB, OUT
+static const Rect kDuckMeter = { 88, 520, 160, 9 };              // cut of the reverb by the ducking
 
 // hover zones with a tooltip (knobs are handled separately)
 enum {
     kZoneFreeze = 0, kZoneRt, kZonePlot, kZonePreset, kZoneBypass, kZoneTheme, kZoneAB, kZoneCopy,
-    kZoneIn, kZoneWet, kZoneOut, kNumZones
+    kZoneIn, kZoneWet, kZoneOut, kZoneDuckMeter, kNumZones
 };
 
 struct Zone {
@@ -236,6 +250,8 @@ static const Zone kZones[kNumZones] = {
     { { kMeterX - 46, kMeterY[1] - 7, kMeterW + 100, 16 }, "REVERB",
       "Peak level of the reverb alone (after low cut and width, before the blend), dBFS." },
     { { kMeterX - 46, kMeterY[2] - 7, kMeterW + 100, 16 }, "OUT", "Output peak level, dBFS." },
+    { { kDuckMeter.x - 50, kDuckMeter.y - 8, kDuckMeter.w + 96, 25 }, "CUT",
+      "Cut of the reverb by the ducking now, dB (0 to 30)." },
 };
 
 static const int kHoverZoneBase = 100;
@@ -268,6 +284,7 @@ public:
         fValues[kParamMeterIn] = -9.5f;
         fValues[kParamMeterWet] = -17.0f;
         fValues[kParamMeterOut] = -8.2f;
+        fValues[kParamMeterDuck] = 7.5f;
 #endif
     }
 
@@ -304,7 +321,7 @@ protected:
             fPresetUser = false;
             fPresetName = kTinplatePresets[index].name;
             for (int i = 0; i < kPresetParamCount; ++i)
-                fValues[i] = fPresetValues[i] = kTinplatePresets[index].values[i];
+                fValues[kPresetParams[i]] = fPresetValues[i] = kTinplatePresets[index].values[i];
             repaint();
         }
     }
@@ -369,6 +386,7 @@ protected:
         drawInputSection();
         drawTankSection();
         drawOutputSection();
+        drawDuckSection();
         drawDecayPlot();
         if (fMenuOpen)
             drawPresetMenu();
@@ -630,11 +648,16 @@ private:
 
     static float defaultValue(const int p) { return kTinplateRanges[p].def; }
 
-    // knob position: low cut logarithmic, the others linear
+    static bool logarithmic(const int p)
+    {
+        return p == kParamLowCut || p == kParamAttack || p == kParamRelease;
+    }
+
+    // knob position: low cut, attack and release logarithmic, the others linear
     static float toNorm(const int p, const float v)
     {
         const TinplateRange& r = kTinplateRanges[p];
-        if (p == kParamLowCut)
+        if (logarithmic(p))
             return std::log(std::fmax(v, r.min) / r.min) / std::log(r.max / r.min);
         return (v - r.min) / (r.max - r.min);
     }
@@ -643,7 +666,7 @@ private:
     {
         const TinplateRange& r = kTinplateRanges[p];
         n = std::fmin(std::fmax(n, 0.0f), 1.0f);
-        if (p == kParamLowCut)
+        if (logarithmic(p))
             return r.min * std::pow(r.max / r.min, n);
         return r.min + n * (r.max - r.min);
     }
@@ -699,7 +722,7 @@ private:
         Slot& s = fSlots[slot];
         for (int i = 0; i < kPresetParamCount; ++i)
         {
-            s.values[i] = fValues[i];
+            s.values[i] = fValues[kPresetParams[i]];
             s.presetValues[i] = fPresetValues[i];
         }
         s.preset = fPreset;
@@ -739,7 +762,7 @@ private:
         const Slot& other = fSlots[1 - fSlot];
         std::string text = "slot=" + std::to_string(fSlot) + ";other=";
         for (int i = 0; i < kPresetParamCount; ++i)
-            text += (i ? "," : "") + TinplateUserPresets::number(other.set ? other.values[i] : fValues[i]);
+            text += (i ? "," : "") + TinplateUserPresets::number(other.set ? other.values[i] : fValues[kPresetParams[i]]);
         setState(kStateKeys[kStateAB], text.c_str());
     }
 
@@ -751,15 +774,26 @@ private:
             return;
         std::istringstream in(other + 6);
         in.imbue(std::locale::classic());
+        // 1.0.0 wrote the first kPresetParamCountV1 values only: the others take their default
         float values[kPresetParamCount];
         for (int i = 0; i < kPresetParamCount; ++i)
+            values[i] = defaultValue(kPresetParams[i]);
+        int count = 0;
+        while (count < kPresetParamCount)
         {
-            float v = kTinplateRanges[i].def;
-            char comma = ',';
-            if (!(in >> v) || !std::isfinite(v) || (i + 1 < kPresetParamCount && !(in >> comma)) || comma != ',')
+            float v = 0.0f;
+            if (!(in >> v) || !std::isfinite(v))
                 return;
-            values[i] = clampValue(i, v);
+            values[count] = clampValue(kPresetParams[count], v);
+            ++count;
+            char comma = 0;
+            if (!(in >> comma))
+                break;
+            if (comma != ',')
+                return;
         }
+        if (count < kPresetParamCountV1)
+            return;
         fSlot = slot[5] - '0';
         Slot& s = fSlots[1 - fSlot];
         for (int i = 0; i < kPresetParamCount; ++i)
@@ -776,7 +810,7 @@ private:
     {
         for (int i = 0; i < kPresetParamCount; ++i)
         {
-            setOnce(i, values[i]);
+            setOnce(kPresetParams[i], values[i]);
             fPresetValues[i] = values[i];
         }
         repaint();
@@ -969,7 +1003,7 @@ private:
             return;   // the hint says why
         float values[kPresetParamCount];
         for (int i = 0; i < kPresetParamCount; ++i)
-            values[i] = fValues[i];
+            values[i] = fValues[kPresetParams[i]];
         if (!TinplateUserPresets::save(name, values))
         {
             fNameError = true;
@@ -1008,7 +1042,7 @@ private:
     bool presetModified() const
     {
         for (int i = 0; i < kPresetParamCount; ++i)
-            if (std::fabs(fValues[i] - fPresetValues[i]) > 1e-4f)
+            if (std::fabs(fValues[kPresetParams[i]] - fPresetValues[i]) > 1e-4f)
                 return true;
         return false;
     }
@@ -1049,7 +1083,8 @@ private:
         const char* fmt = "%.1f";
         if (p <= kParamBlend)
             fmt = "%.3f";
-        else if (p == kParamPredelay || p == kParamLowCut || p == kParamWidth)
+        else if (p == kParamPredelay || p == kParamLowCut || p == kParamWidth || p == kParamThreshold
+                 || p == kParamRelease)
             fmt = "%.0f";
         std::snprintf(buf, size, fmt, v);
     }
@@ -1111,6 +1146,20 @@ private:
             break;
         case kParamWidth:  std::snprintf(buf, size, "%.0f %%", v); break;
         case kParamOutput: std::snprintf(buf, size, "%+.1f dB", v); break;
+        case kParamDuck:
+            if (v < 0.05f)
+                std::snprintf(buf, size, "off");
+            else
+                std::snprintf(buf, size, detail ? "%.1f dB (largest cut of the reverb)" : "%.1f dB", v);
+            break;
+        case kParamThreshold: std::snprintf(buf, size, "%.0f dBFS", v); break;
+        case kParamAttack:    std::snprintf(buf, size, v < 9.95f ? "%.1f ms" : "%.0f ms", v); break;
+        case kParamRelease:
+            if (v >= 999.5f)
+                std::snprintf(buf, size, "%.2f s", v * 0.001f);
+            else
+                std::snprintf(buf, size, "%.0f ms", v);
+            break;
         default:           std::snprintf(buf, size, "%.2f", v); break;
         }
     }
@@ -1395,6 +1444,56 @@ private:
         drawMeters();
     }
 
+    void drawDuckSection()
+    {
+        const bool off = fValues[kParamDuck] < 0.05f;
+        sectionTitle(kSecDuck, "4", "DUCKING", "the reverb steps back while the input plays");
+        drawKnob(kKnobDuck);
+        if (off)
+            globalAlpha(0.35f);   // no effect while the depth is 0
+        drawKnob(kKnobThreshold);
+        drawKnob(kKnobAttack);
+        drawKnob(kKnobRelease);
+        globalAlpha(1.0f);
+
+        // cut of the reverb, 0 .. 30 dB, growing from the left
+        const Rect& m = kDuckMeter;
+        const float cy = m.y + m.h * 0.5f;
+        label(m.x - 8, cy, 9.5f, fT->text, ALIGN_RIGHT | ALIGN_MIDDLE, "CUT", 1);
+        beginPath();
+        roundedRect(m.x, m.y, m.w, m.h, 2);
+        fillColor(fT->deepWell);
+        fill();
+        strokeWidth(1.0f);
+        strokeColor(fT->meterEdge);
+        stroke();
+        const float f = std::fmin(std::fmax(fValues[kParamMeterDuck] / 30.0f, 0.0f), 1.0f);
+        if (f > 0.002f)
+        {
+            beginPath();
+            roundedRect(m.x + 1.5f, m.y + 1.5f, (m.w - 3.0f) * f, m.h - 3.0f, 1.5f);
+            fillPaint(linearGradient(m.x, 0, m.x + m.w, 0, fT->deep, fT->hot));
+            fill();
+        }
+        beginPath();
+        for (int d = 10; d < 30; d += 10)
+        {
+            const float x = m.x + 1.5f + (m.w - 3.0f) * d / 30.0f;
+            moveTo(x + 0.5f, m.y - 2);
+            lineTo(x + 0.5f, m.y + m.h + 2);
+        }
+        strokeColor(fT->grid);
+        stroke();
+        const char* const ticks[] = { "0", "10", "20", "30 dB" };
+        for (int j = 0; j < 4; ++j)
+            label(m.x + 1.5f + (m.w - 3.0f) * j / 3.0f, m.y + m.h + 9, 8, fT->faint,
+                  j == 0 ? ALIGN_LEFT | ALIGN_MIDDLE : j == 3 ? ALIGN_RIGHT | ALIGN_MIDDLE : ALIGN_CENTER | ALIGN_MIDDLE,
+                  ticks[j]);
+        char b[16];
+        std::snprintf(b, sizeof(b), fValues[kParamMeterDuck] < 0.05f ? "0.0" : "-%.1f", fValues[kParamMeterDuck]);
+        label(m.x + m.w + 8, cy, 9.5f, fT->dim, ALIGN_LEFT | ALIGN_MIDDLE, b);
+    }
+
     void drawKnob(const int i)
     {
         const KnobDef& k = kKnobs[i];
@@ -1577,14 +1676,15 @@ private:
         fillColor(fT->plot);
         fill();
 
-        // time scale: 2, 4, 6 or 8 s full scale
+        // time scale: 2, 4, 6, 8, 10 or 12 s full scale
         double top = 0.0;
         for (int j = 0; j <= 60; ++j)
         {
             const double hz = 20.0 * std::pow(fmax / 20.0, j / 60.0);
             top = std::fmax(top, frozen() ? 0.0 : decaySeconds(hz));
         }
-        const double full = frozen() ? 6.0 : top <= 1.9 ? 2.0 : top <= 3.8 ? 4.0 : top <= 5.7 ? 6.0 : 8.0;
+        const double full = frozen() ? 6.0 : top <= 1.9 ? 2.0 : top <= 3.8 ? 4.0 : top <= 5.7 ? 6.0
+                          : top <= 7.6 ? 8.0 : top <= 9.5 ? 10.0 : 12.0;
         const auto ty = [&](const double s) {
             return r.y + r.h * (1.0f - static_cast<float>(std::fmin(s / full, 1.0)));
         };

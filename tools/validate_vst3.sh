@@ -29,7 +29,8 @@ open(p, 'w', newline='').write(s)
 PY
     cmake -S sdk -B build-win $OPTS -DCMAKE_SYSTEM_NAME=Windows \
           -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc-posix -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++-posix \
-          -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres -DCMAKE_EXE_LINKER_FLAGS="-static -municode" >/dev/null
+          -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres -DCMAKE_EXE_LINKER_FLAGS="-static -municode" \
+          -DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY >/dev/null
     cmake --build build-win --target validator -j"${JOBS:-7}" >/dev/null
     # own wine prefix in WORKDIR: never the user's ~/.wine
     WINEDEBUG=-all WINEPREFIX="${WINEPREFIX:-$W/wineprefix}" wine build-win/bin/validator.exe "Z:$HERE/bin/windows/tinplate_reverb.vst3" | grep -a "Result:\|ERROR"

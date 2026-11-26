@@ -17,11 +17,13 @@
  * 6. Freeze: the tail keeps its level for 10 s, ignores the input, then decays again.
  * 7. Decay time: RT60 measured on the impulse response (tools/rt60_measure.hpp) between the
  *    points of the measured table == the value shown by the interface (plugin/Rt60.hpp),
- *    within 10 %, at 44.1 and 96 kHz.
+ *    within 10 %, at 44.1 and 96 kHz, also with Tail beyond 1 (up to 1.16: 10 s at 500 Hz).
  * 8. Smoothing: Blend jumping from 0 to 1 moves the output smoothly (the original jumps);
  *    a change of pre-delay gives no click.
  * 9. Presets: finite output, sensible peak.
  * 10. Meters; state of the interface kept; FPU state of the caller restored after run().
+ * 11. Ducking: steady cut (depth, threshold), attack time, meter of the cut; once the cut is
+ *     back to 0, output identical to the bit to a run without ducking.
  */
 #include "src/DistrhoPluginInternal.hpp"
 #include "src/DistrhoPlugin.cpp"
@@ -48,7 +50,7 @@ static void check(const bool ok, const char* what)
 }
 
 struct Settings {
-    float values[kPresetParamCount];
+    float values[kParamCount];   // by parameter index; those of kPresetParams are used
     float freeze = 0.0f;
     float bypass = 0.0f;
 };
@@ -57,7 +59,7 @@ static Settings originalSettings(const float bw, const float tail, const float d
 {
     Settings s;
     for (int i = 0; i < kPresetParamCount; ++i)
-        s.values[i] = kTinplatePresets[1].values[i];   // "Original (CAPS)"
+        s.values[kPresetParams[i]] = kTinplatePresets[1].values[i];   // "Original (CAPS)"
     s.values[kParamBandwidth] = bw;
     s.values[kParamTail] = tail;
     s.values[kParamDamping] = damp;
@@ -82,7 +84,7 @@ static void process(const Settings& s, const double sr, const std::vector<float>
     d_nextSampleRate = sr;
     PluginExporter p(nullptr, nullptr, nullptr, nullptr);
     for (int i = 0; i < kPresetParamCount; ++i)
-        p.setParameterValue(i, s.values[i]);
+        p.setParameterValue(kPresetParams[i], s.values[kPresetParams[i]]);
     p.setParameterValue(kParamFreeze, s.freeze);
     p.setParameterValue(kParamBypass, s.bypass);
     p.activate();
@@ -353,10 +355,13 @@ int main()
             { 44100.0, 0.85f, 0.10f, 300.0 }, { 44100.0, 0.15f, 0.90f, 1500.0 },
             { 44100.0, 0.95f, 0.45f, 6000.0 }, { 96000.0, 0.55f, 0.60f, 3000.0 },
             { 96000.0, 0.75f, 0.20f, 180.0 },
+            // beyond the range of the original (tail up to 1.16): 10 s at 500 Hz
+            { 44100.0, 1.16f, 0.00f, 500.0 }, { 44100.0, 1.12f, 0.35f, 900.0 },
+            { 96000.0, 1.07f, 0.55f, 2500.0 },
         };
         for (const auto& c : cases)
         {
-            std::vector<float> longImp(static_cast<size_t>(16.0 * c.sr), 0.0f);
+            std::vector<float> longImp(static_cast<size_t>(24.0 * c.sr), 0.0f);
             longImp[0] = 1.0f;
             Settings s = originalSettings(1.0f, c.tail, c.damping, 1.0f);
             process(s, c.sr, longImp, longImp, oL, oR);
@@ -413,7 +418,7 @@ int main()
     {
         Settings s;
         for (int i = 0; i < kPresetParamCount; ++i)
-            s.values[i] = kTinplatePresets[k].values[i];
+            s.values[kPresetParams[i]] = kTinplatePresets[k].values[i];
         process(s, sr, L, R, oL, oR);
         bool finite = true;
         for (size_t i = 0; i < N; ++i)
@@ -452,6 +457,71 @@ int main()
         p.run(in, out, 256);
         check(_mm_getcsr() == before, "FPU state of the caller restored (FTZ / DAZ only inside run)");
 #endif
+    }
+
+    // 11. ducking -------------------------------------------------------------------------------
+    std::printf("11. ducking\n");
+    {
+        // 1 kHz at -6 dBFS for 1 s, then silence; wet only
+        const size_t on = static_cast<size_t>(1.0 * sr), n = static_cast<size_t>(5.0 * sr);
+        std::vector<float> tone(n, 0.0f);
+        for (size_t i = 0; i < on; ++i)
+            tone[i] = 0.5f * static_cast<float>(std::sin(2.0 * M_PI * 1000.0 * i / sr));
+        Settings s = originalSettings(0.8f, 0.6f, 0.4f, 1.0f);
+        process(s, sr, tone, tone, rL, rR);
+        const size_t a = static_cast<size_t>(0.5 * sr);
+        char buf[160];
+
+        // threshold -30: 24 dB over it, cut = the whole depth
+        s.values[kParamDuck] = 12.0f;
+        s.values[kParamThreshold] = -30.0f;
+        float outs[kParamCount];
+        std::vector<float> half(tone.begin(), tone.begin() + static_cast<long>(on));
+        std::vector<float> hL, hR;
+        process(s, sr, half, half, hL, hR, {}, outs);
+        process(s, sr, tone, tone, oL, oR);
+        double cut = db(rms(oL, a, on) / rms(rL, a, on));
+        std::snprintf(buf, sizeof(buf), "depth 12 dB, input 24 dB over the threshold: reverb %.2f dB, meter %.2f dB",
+                      cut, outs[kParamMeterDuck]);
+        check(std::fabs(cut + 12.0) < 0.3 && std::fabs(outs[kParamMeterDuck] - 12.0f) < 0.3f, buf);
+
+        // once the cut is back to 0, the same output as without ducking (the plate is not touched)
+        size_t back = n;
+        for (size_t i = n; i-- > on;)
+            if (oL[i] != rL[i] || oR[i] != rR[i])
+            {
+                back = i + 1;
+                break;
+            }
+        std::snprintf(buf, sizeof(buf), "identical to no ducking %.2f s after the input stops (release 300 ms)",
+                      (back - on) / sr);
+        check(back < on + static_cast<size_t>(3.2 * sr), buf);   // 12 dB -> 0.001 dB: 9.4 x 300 ms
+
+        // threshold -12: the input peak goes 6 dB over it, cut 6 dB (depth 30 not reached)
+        s.values[kParamDuck] = 30.0f;
+        s.values[kParamThreshold] = -12.0f;
+        process(s, sr, tone, tone, oL, oR);
+        cut = db(rms(oL, a, on) / rms(rL, a, on));
+        std::snprintf(buf, sizeof(buf), "input 6 dB over the threshold, depth 30 dB: reverb %.2f dB", cut);
+        check(cut < -5.0 && cut > -6.3, buf);
+
+        // attack 10 ms: 63 % of the cut after 10 ms
+        s.values[kParamDuck] = 12.0f;
+        s.values[kParamThreshold] = -30.0f;
+        std::vector<float> start(tone.begin(), tone.begin() + static_cast<long>(0.01 * sr));
+        process(s, sr, start, start, hL, hR, {}, outs);
+        std::snprintf(buf, sizeof(buf), "attack 10 ms: cut %.2f dB after 10 ms (12 x 0.63 = 7.6)", outs[kParamMeterDuck]);
+        check(outs[kParamMeterDuck] > 6.8f && outs[kParamMeterDuck] < 8.2f, buf);
+
+        // depth 0: no cut whatever the other settings
+        s.values[kParamDuck] = 0.0f;
+        s.values[kParamThreshold] = -60.0f;
+        s.values[kParamAttack] = 1.0f;
+        process(s, sr, tone, tone, oL, oR, {}, outs);
+        bool same = outs[kParamMeterDuck] == 0.0f;
+        for (size_t i = 0; i < n; ++i)
+            same = same && oL[i] == rL[i] && oR[i] == rR[i];
+        check(same, "depth 0: output identical to no ducking");
     }
 
     std::printf("%s\n", gFailures == 0 ? "all DSP tests passed" : "DSP TESTS FAILED");
