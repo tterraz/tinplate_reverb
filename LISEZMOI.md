@@ -9,11 +9,13 @@ Nom provisoire (changer : `DistrhoPluginInfo.h`, `Makefile`, installateur, préf
 ![interface, thème Slate](doc/captures/capture_interface.png)
 ![interface, thème Tin, bulle d'aide](doc/captures/capture_interface_tin.png)
 
-**Manuel d'utilisation** (français, 12 pages : réglages, préréglages, algorithme avec schémas et
-figures) : `doc/manuel.pdf` ; source `doc/manuel.tex` (pdflatex ×3 dans `doc/`), figures
-`doc/figures.py` (mêmes formules que le DSP, table des RT60 lue dans `plugin/Rt60Table.hpp`,
-réponses impulsionnelles calculées par la plaque elle-même via `tools/impulse.cpp`, compilé
-dans `build/` par le script).
+**Manuels d'utilisation** (18 pages : réglages, préréglages, algorithme avec schémas et
+figures) : français `doc/manuel.pdf` (source `doc/manuel.tex`), anglais `doc/manual.pdf`
+(`doc/manual.tex`, même contenu, à tenir à jour ensemble) ; pdflatex ×3 dans `doc/` ; figures
+`doc/figures.py` (`fig_*.pdf` en français, `fig_*_en.pdf` en anglais ; mêmes formules que le DSP,
+table des RT60 lue dans `plugin/Rt60Table.hpp`, réponses impulsionnelles calculées par la plaque
+elle-même via `tools/impulse.cpp`, compilé dans `build/` par le script ; argument `left` :
+entrée stéréo, impulsion à gauche).
 
 ## Algorithme
 Cœur identique à l'original (`plugin/PlateCore.hpp`, transcription de `PlateStub` de CAPS
@@ -41,8 +43,8 @@ tailles variées, en compilation stricte). Mélanges (Blend converti en dB) : é
 gains, 1,3e-7 de la crête au plus (20 cas) ; options de DPF `-O3 -ffast-math` : < 1e-5. La référence est le code de CAPS lui-même (`tests/caps/`, sources
 d'origine non modifiées), appelé par son descripteur LADSPA comme le ferait un hôte.
 
-Chaîne : (L + R + normal) / 2 → Pre-delay → × entrée (Freeze) → plaque → Low cut → Width →
-× ducking → wet ; sortie = wet × 10^(Reverb/20) + sec × 10^(Dry/20) → Output → fondu du Bypass
+Chaîne : L, R → Pre-delay → (L + R + normal) / 2 (ou L et R, entrée stéréo) → × entrée (Freeze)
+→ plaque → Low cut → High cut → Mono bass et Width → × ducking → wet ; sortie = wet × 10^(Reverb/20) + sec × 10^(Dry/20) → Output → fondu du Bypass
 (niveaux à -60 dB : gain 0 ; à 0 dB : exactement 1).
 Latence nulle.
 
@@ -56,7 +58,8 @@ Différences voulues avec l'original :
 ## Réglages
 | Réglage | Rôle |
 |---|---|
-| Pre-delay | 0-250 ms avant la plaque ; un changement passe de l'ancien au nouveau retard par un fondu de 30 ms (pas de glissement de hauteur) |
+| Pre-delay | 0-250 ms avant la plaque, sur les deux canaux (depuis 1.2.0 ; à 0 : mêmes échantillons) ; un changement passe de l'ancien au nouveau retard par un fondu de 30 ms (pas de glissement de hauteur) |
+| Sync, Note | (1.2.0, point G) bouton SYNC : pré-retard = valeur de note (`TinplateNote`, 13 valeurs 1/64 à 1/4, pointées D, triolets T, rangées par durée ; paramètre entier, liste énumérée pour l'hôte) au tempo de l'hôte (`DISTRHO_PLUGIN_WANT_TIMEPOS`, `getTimePosition().bbt`, lu à chaque bloc ; 120 BPM sans tempo) ; au plus 2 s (`kPredelayMaxMs`, mémoire en conséquence) ; changement de tempo ou de note : même fondu de 30 ms ; dans l'interface, le bouton Pre-delay devient NOTE (même place ; glisser par crans, molette = une valeur, pas de saisie au clavier) ; test 18 |
 | Bandwidth | passe-bas d'entrée (original) ; affiché : sa fréquence à -3 dB à la fréquence d'échantillonnage courante (« open » s'il reste au-dessus de -3 dB jusqu'à Nyquist) |
 | Tail | longueur de la réverbération (original jusqu'à 1 : 5,1 s à 500 Hz) ; jusqu'à 1,16 depuis 1.1.0, même loi (decay 0,869 : 10 s à 500 Hz, Damping au minimum) ; affiché : RT60 à 500 Hz mesuré (voir plus bas) |
 | Damping | passe-bas dans la boucle (original) ; affiché : sa fréquence à -3 dB |
@@ -65,6 +68,8 @@ Différences voulues avec l'original :
 | Freeze | réverbération tenue sans fin : entrée de la plaque fermée, decay à 1, damping supprimé (20 ms), profondeur de modulation à 0 (200 ms) ; le signal sec passe toujours |
 | Dry, Reverb | (1.1.0, à la place de Blend) faders des niveaux du sec et de la réverbération seule, off (-60) à +6 dB ; loi de position par morceaux (off, -40, -24, -12, 0, +6 dB à 0, 0,15, 0,35, 0,55, 0,82, 1) |
 | Width | largeur stéréo de la réverbération (0 % mono, 200 % côté doublé) |
+| Stereo input | (1.2.0, point D, menu OPTIONS) off : somme mono (l'original) ; on : `PlateCore::processStereo`, second jeu de filtres d'entrée (`input2`), L dans la moitié droite du réservoir (ses prises font l'essentiel de la sortie gauche ; vérifié par mesure, l'inverse donne une sortie à droite), R dans la gauche ; rampe de 20 ms `fStereo` (t : moitié gauche = da + t (db - da), da = diffusion de x + t (L - x)) ; t = 0 en fin de rampe : `input2` vidé et plus calculé ; L = R : sortie identique au mono (au bit) ; effet : 60 ms d'un seul côté puis +2 à +4 dB jusqu'à 0,5 s, la queue revient au centre (structure) ; test 16 |
+| Mono bass | (1.2.0, point E, menu OPTIONS) 20 (off) à 500 Hz, logarithmique : passe-haut RBJ 2e ordre (`Cut2::process1`) sur le côté s = (wL - wR)/2 seul, avant Width ; off : contourné (identité au bit) ; test 17 (200 Hz : côté -24 dB à 50 Hz, 0 dB à 2 kHz, milieu intact) |
 | Low cut | passe-haut à 12 dB/octave sur la réverbération seule, 20 Hz (off) à 1 kHz, bouton logarithmique |
 | High cut | (point A d'`AMELIORATIONS.md`) passe-bas à 12 dB/octave sur la réverbération seule, après Low cut, 1 kHz à 20 kHz (off), logarithmique ; même structure que Low cut (`Cut2`, RBJ en double, contourné à off) ; test 4 (8 kHz : -38 dB pour 1 kHz) |
 | Output | gain de toute la sortie, -24..+12 dB (fader depuis 1.1.0) |
@@ -84,9 +89,13 @@ Duck 0 et baisse revenue sous 1e-3 dB : gain non appliqué, sortie au bit près 
 (test 11). Sortie `meter_duck` (baisse en dB) pour le vu-mètre CUT. Pas d'entrée latérale
 (sidechain externe écarté, décision de l'utilisateur).
 
-**Ordre des paramètres** (`TinplateParams.hpp`) : plaque, Wet, Dry, Pre-delay, Low cut, Width,
-Output, ducking, Clear, puis Freeze et Bypass, puis les sorties ; les préréglages (d'usine, de
-l'utilisateur, jeux A/B) couvrent `kParamBandwidth` .. `kParamWindow`. Aucune compatibilité avec
+**Ordre des paramètres** (`TinplateParams.hpp`) : plaque (Bandwidth, Tail, Damping, Size, Depth,
+Rate), Wet, Dry, Link, Mix, Pre-delay, Low cut, High cut, Width, Output, ducking, Clear, Stereo
+input, Mono bass, Sync, Note, puis Freeze et Bypass, puis les sorties (vu-mètres, puis historique
+`hist_in`, `hist_wet`, `hist_cut`, `hist_clears`) ; les préréglages (d'usine, de l'utilisateur,
+jeux A/B) couvrent `kParamBandwidth` .. `kParamNote`. Les index ont changé depuis 1.1.0 (Size,
+Depth, Rate, Link, Mix, High cut insérés) : l'automation d'un projet 1.1.0 se rattache par les
+symboles là où l'hôte s'en sert (LV2, CLAP par identifiant : non vérifié). Aucune compatibilité avec
 1.0.0 (aucun projet 1.0.0, dit l'utilisateur) : ordre et symboles changés librement.
 
 **Clear** (1.1.0, variante « deux plaques », choisie par l'utilisateur ; optionnel, éteint par
@@ -124,16 +133,26 @@ mesure à 10 % près entre les points de la table (15 cas, 44,1 et 96 kHz, dont 
 Échelle du graphique : 2 à 32 s.
 
 Préréglages d'usine : Default, Original (CAPS), Vocal plate, Drum plate, Ambience, Dark and
-long, Bright and wide, Send (100 % wet), Ducked vocal (1.1.0) ; réglés à la lecture des lois, **pas à l'oreille**.
+long, Bright and wide, Send (100 % wet), Ducked vocal (1.1.0), Piano (clear), Snare (clear),
+Guitar (stereo) (1.2.0, point J : Clear, Link, entrée stéréo, Mono bass, Sync) ; réglés à la
+lecture des lois, **pas à l'oreille** (RT60 du manuel calculés par `TinplateRt60::seconds`).
 Préréglages de l'utilisateur : comme Brimstone (voir « Interface »).
 
 ## Interface
-900 × 730 (600 en 1.0.0), redimensionnable (proportions gardées), HiDPI. Trois sections numérotées dans l'ordre
-du signal : **1 INPUT** (Pre-delay, Bandwidth), **2 PLATE** (Tail, Damping, Freeze, RT60 à
+900 × 858 (730 en 1.1.0, 600 en 1.0.0), redimensionnable (proportions gardées), HiDPI. Trois sections numérotées dans l'ordre
+du signal : **1 INPUT** (Pre-delay ou NOTE selon le bouton SYNC, Bandwidth), **2 PLATE** (Tail, Damping, Freeze, RT60 à
 500 Hz, 125 Hz et 4 kHz ; Tail et Damping grisés pendant le gel), **3 OUTPUT** (Width, Low cut, High cut ;
 faders DRY, REVERB, OUTPUT ; vu-mètres IN, REVERB, OUT). Dessous, la bande **4 DUCKING** (Duck, Threshold,
 Attack, Release, grisés sauf Duck quand Duck = 0 ; vu-mètre CUT 0-30 dB) et **5 CLEAR** (bouton,
-état waiting/ARMED/CLEARED, Floor, Trigger, Fade, Window grisés si éteint). En bas : **temps de
+état waiting/ARMED/CLEARED, Floor, Trigger, Fade, Window grisés si éteint). Puis **6 HISTORY**
+(1.2.0, point I) : crêtes d'entrée (acier) et de la réverbération après ducking (laiton) sur une
+échelle fixe 0 à -80 dBFS, baisse du ducking ombrée depuis le haut, vidages en traits verticaux,
+lignes THRESHOLD (à gauche, si Duck > 0), FLOOR et TRIGGER (à droite, si Clear) ; un point toutes
+les 25 ms (`uiIdle`, crêtes des ~30 dernières ms données par le DSP, `RecentPeak` de Brimstone ;
+vidage = compteur `hist_clears` changé), 30 s gardées, 3/7/30 s affichées (non enregistré avec
+le projet). En-tête : bouton **OPTIONS** (point allumé si une option est active) ouvrant un
+panneau (Stereo input, bouton Mono bass ; clic dehors ou Échap ferme ; tant qu'il est ouvert,
+seuls ses éléments réagissent). En bas : **temps de
 réverbération en fonction de la fréquence** (laiton, secondes, échelle de 2 à 12 s selon la courbe) et **tonalité de la
 réverbération** (acier, tirets, dB : Bandwidth et Low cut).
 
@@ -144,9 +163,10 @@ Repris de Brimstone tel quel (même comportement, voir `../brimstone_vst3/LISEZM
 - **préréglages** : liste déroulante (FACTORY puis USER, « Save current settings... »,
   suppression par la croix cliquée deux fois, molette sur la boîte fermée) ; fichiers
   `<nom>.preset` dans `%APPDATA%\Tinplate\presets\` ou `~/.config/tinplate/presets/` (clés :
-  symboles des paramètres, `bandwidth`, `tail`, `damping`, `wet`, `dry`, `link`, `predelay`, `lowcut`, `width`,
-  `output`, `duck`, `threshold`, `attack`, `release`, `clear`, `floor`, `trigger`, `fade`,
-  `window` ; Freeze et Bypass exclus) ;
+  symboles des paramètres, `bandwidth`, `tail`, `damping`, `size`, `depth`, `rate`, `wet`, `dry`,
+  `link`, `mix`, `predelay`, `lowcut`, `highcut`, `width`, `output`, `duck`, `threshold`,
+  `attack`, `release`, `clear`, `floor`, `trigger`, `fade`, `window`, `stereo`, `monobass`,
+  `sync`, `note` ; Freeze et Bypass exclus) ;
 - **A/B** : deux jeux de réglages, état DPF `ab` enregistré avec le projet ;
 - **thèmes** Slate (sombre) et Tin (clair, gris légèrement vert « sage » : gris clairs de 1.0.0
   mêlés à 22 % de (155, 175, 155) ; choisi par l'utilisateur parmi tin, pewter, mist, sage), pastille SLATE | TIN, préférence de l'utilisateur
@@ -159,10 +179,11 @@ Code : `plugin/TinplateUI.cpp`, `TinplatePrefs.hpp`, `TinplateUserPresets.hpp`.
 2. tests du DSP (deux fois : stricte, options de DPF), des préférences et des préréglages ;
 3. Windows → `bin/windows/`, Linux → `bin/linux/` ;
 4. installateur Windows (`installer/tinplate.nsi`) si `makensis` est présent
-   → `bin/Tinplate-Reverb-1.1.0-setup.exe` (VST3 imposé, CLAP et manuel PDF en option, cochés
-   par défaut ; le manuel va dans `Program Files\Tinplate\Tinplate-Reverb-manuel.pdf`, avec un
-   raccourci dans le menu Démarrer de tous les utilisateurs). Le PDF n'est pas refait par
-   `build.sh` : recompiler `doc/manuel.tex` avant si le manuel a changé.
+   → `bin/Tinplate-Reverb-1.2.0-setup.exe` (VST3 imposé, CLAP et manuels PDF en option, cochés
+   par défaut ; les manuels vont dans `Program Files\Tinplate\Tinplate-Reverb-manual.pdf` et
+   `...-manuel.pdf`, avec deux raccourcis dans le menu Démarrer de tous les utilisateurs). Les PDF
+   ne sont pas refaits par `build.sh` : recompiler `doc/manual.tex` et `doc/manuel.tex` avant si
+   les manuels ont changé.
 
 Installation manuelle sous Windows : copier `bin/windows/tinplate_reverb.vst3` (le dossier entier)
 dans `C:\Program Files\Common Files\VST3\`, `tinplate_reverb.clap` dans `...\Common Files\CLAP\`.
@@ -186,6 +207,13 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   d'un cœur), 127 ns à 192 kHz (2,4 %) ; silence identique (pas de dénormaux) ; Clear avec
   fondus 40 % du temps, Size en glissement permanent, ducking actif : +20 à +40 % (au plus
   178 ns, 3,4 % d'un cœur à 192 kHz). Mesures à ±10 % (bruit d'une exécution à l'autre).
+- 1.2.0 (2026-11-26) : `tests/test_dsp.cpp` 72 contrôles par compilation (tests 16 entrée
+  stéréo, 17 Mono bass, 18 pré-retard au tempo, 19 sorties de l'historique ; identité au bit
+  avec CAPS inchangée : 60 cas, mélanges 1,34e-7 strict, 2,25e-7 en `-ffast-math`) ; préréglages
+  de l'utilisateur 17 ; `build.sh` complet ; validateur VST3 47/47 Linux et Windows (sous Wine) ;
+  installateur 1.2.0 sous Wine (`/S`, préfixe neuf) : VST3 identique à `bin/windows/`, CLAP, deux
+  manuels identiques à `doc/`, deux raccourcis, puis tout retiré ; captures refaites (affichage du
+  panneau OPTIONS, de SYNC et de l'historique vu ; clics dans l'hôte non essayés).
 - `tests/test_prefs.cpp` (7) et `tests/test_user_presets.cpp` (17, sous locale `fr_FR.UTF-8`).
 - Validateur VST3 de Steinberg : 47/47 sur le VST3 Linux et sur le VST3 Windows (sous Wine) ;
   1.1.0 : 47/47 sur les deux (script corrigé pour MinGW comme Noise Padifier :
@@ -211,11 +239,14 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   `tools/validate_vst3.sh`). Dépôt git : `master`, distant `origin` = `git@github.com:tterraz/tinplate_reverb.git` (dépôt GitHub
   renommé de `tinplate` en `tinplate_reverb` le 2026-11-25 ; l'ancienne adresse redirige).
 - Captures : `CXXFLAGS="-DTINPLATE_UI_DEMO=<zone> -DTINPLATE_UI_DEMO_THEME=<0|1>
-  [-DTINPLATE_UI_DEMO_PRESET=<n>] [-DTINPLATE_UI_DEMO_FREEZE=1]"`, version autonome
-  (`make -C plugin jack BUILD_DIR_SUFFIX=-demo-<x> DPF_TARGET_DIR=../build-demo-<x>/bin` avec les
-  variables MinGW de `build.sh`), lancée sous Wine (`WINEPREFIX` dédié), puis `import -window`
-  sur la fenêtre « Tinplate: Tinplate Reverb » (`xwininfo -root -tree`). Zones : knobs 0-7
-  (ordre de `kKnobs`), bulles 100 + indice de `kZones`.
+  [-DTINPLATE_UI_DEMO_PRESET=<n>] [-DTINPLATE_UI_DEMO_FREEZE=1] [-DTINPLATE_UI_DEMO_CLEAR=1]
+  [-DTINPLATE_UI_DEMO_OPTIONS=1] [-DTINPLATE_UI_DEMO_SYNC=1]"`, version autonome
+  (`make -C plugin jack BUILD_DIR_SUFFIX=-demo-<x> DPF_TARGET_DIR=$PWD/build-demo-<x>/bin` avec
+  les variables MinGW de `build.sh`), puis `tools/capture_ui.sh build-demo-<x>/bin/tinplate_reverb.exe
+  OUT.png` (Wine, préfixe `build/wineprefix`, attend la fenêtre 900 × 858). Zones : -1 aucune,
+  knobs (ordre de `kKnobs`), bulles 100 + indice de `kZones`. Historique : synthétique en mode
+  démo (`demoHistory`, vidages seulement avec `_CLEAR`). Captures 1.2.0 : Slate = préréglage 8
+  (Ducked vocal) ; Tin = préréglage 8, `_CLEAR`, `_OPTIONS`, `_SYNC`.
 - **Release GitHub** (procédure ; `V` = numéro) : `./build.sh` complet sur `master` propre ;
   fichiers assemblés dans `build/release/` (non suivi) : installateur
   `bin/Tinplate-Reverb-V-setup.exe`, `Tinplate-Reverb-V-windows.zip` (VST3, CLAP),
@@ -235,8 +266,12 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   vrai hôte. Release et étiquette `v1.0.0` supprimées de GitHub le 2026-11-26
   (demande de l'utilisateur, aucun utilisateur de 1.0.0) : `v1.1.0` est la seule release.
 - **Après `v1.1.0` (session 72, non publié)** : C Size, A High cut, K banc CPU, B Depth/Rate,
-  H Mix lié ; restent D (entrée stéréo) et E (grave mono), à mettre dans un petit menu d'options
-  (accord de l'utilisateur ; réorganiser la fenêtre au besoin), puis G, I, L ; ergonomie à
-  revoir avec l'utilisateur une fois tout fait ; prochaine release : nouveau numéro.
+  H Mix lié.
+- **1.2.0 (session 73, 2026-11-26, non publiée, non commitée à la rédaction)** : D entrée stéréo
+  et E Mono bass (menu OPTIONS), G pré-retard au tempo (SYNC), I historique (section 6, fenêtre
+  900 × 858), J trois préréglages, L manuel anglais (installateur : deux manuels), K cas
+  « options ». Version 1.2.0 dans `getVersion`, l'installateur, `README.md`, les manuels.
+  Reste : M (validateur CLAP : `clap-validator` absent, binaire à télécharger, non fait),
+  ergonomie à revoir avec l'utilisateur, écoute, vrai hôte, release.
 - Pistes non faites : réglages des préréglages à l'oreille ;
   autres pistes dans `AMELIORATIONS.md`.

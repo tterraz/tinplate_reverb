@@ -13,8 +13,8 @@
  * controls keep their 0..1 ranges and laws (TinplateParams.hpp).
  *
  * Signal flow:
- *   x = (L + R + normal) / 2 -> pre-delay -> x input gain (freeze) -> plate tank
- *     -> low cut -> high cut -> width -> x ducking gain -> wet;
+ *   L, R -> pre-delay -> x = (L + R + normal) / 2 -> x input gain (freeze) -> plate tank
+ *     -> low cut -> high cut -> mono bass and width -> x ducking gain -> wet;
  *   out = wet x wet level + dry x dry level -> output gain -> bypass crossfade
  *   (levels in dB, -60 = off; CAPS has a blend instead: wet level blend^1.53, dry 1 - that;
  *   Link: the parameter Mix sets both, as the blend of CAPS (wet mix^1.53, dry 1 - wet), the
@@ -59,8 +59,20 @@
  * times 0.5 to 2 (PlateCore), glided in 100 ms; the decay gain is not compensated (a larger
  * plate rings longer at the same Tail).  100 %: the original, to the bit.
  *
- * Pre-delay: integer delay in samples; a change crossfades from the old to the new delay in
- * 30 ms (no pitch glide), the next change waits for the end of the crossfade.
+ * Pre-delay: integer delay in samples, of both channels; a change crossfades from the old to the
+ * new delay in 30 ms (no pitch glide), the next change waits for the end of the crossfade.
+ * Locked to the tempo (Sync): a note value (TinplateNote) at the tempo of the host (120 BPM
+ * without one), at most 2 s; a change of tempo crossfades the same way.
+ *
+ * Stereo input (option): L and R each through the input filters of the plate (two sets) and into
+ * one half of the tank (PlateCore::processStereo); switched by a 20 ms ramp between the mono and
+ * the stereo feeds.  Off: the original.  A centred input gives the same output either way.
+ *
+ * Mono bass (option): the side signal of the reverb is high-passed (12 dB / octave), the mid
+ * untouched: the reverb is mono below the frequency.  Off (minimum): no filter, to the bit.
+ *
+ * History (outputs for the interface): input and reverb peaks and the cut of the ducking over the
+ * last ~30 ms, and the count of the clearings.
  */
 
 #include "DistrhoPlugin.hpp"
@@ -148,12 +160,13 @@ struct Ramp
 struct Cut2
 {
     bool lowpass = false;
+    float off = kLowCutOff;   // frequency at which the filter is off (low cut, mono bass: minimum; high cut: maximum)
     Ramp<double> c[5];   // b0, b1, b2, a1, a2
     double z1[2] = { 0, 0 }, z2[2] = { 0, 0 };
 
     void coefficients(const float hz, const double fs, double k[5]) const
     {
-        if (lowpass ? hz >= kHighCutOff : hz <= kLowCutOff)
+        if (lowpass ? hz >= off : hz <= off)
         {
             k[0] = 1.0;
             k[1] = k[2] = k[3] = k[4] = 0.0;
@@ -208,6 +221,58 @@ struct Cut2
             *io[ch] = static_cast<float>(y);
         }
     }
+
+    // one channel only (the first state)
+    void process1(float& io)
+    {
+        double k[5];
+        for (int i = 0; i < 5; ++i)
+            k[i] = c[i].next();
+        const double x = io;
+        const double y = k[0] * x + z1[0];
+        z1[0] = k[1] * x - k[3] * y + z2[0];
+        z2[0] = k[2] * x - k[4] * y;
+        io = static_cast<float>(y);
+    }
+};
+
+// Peak of the last ~30 ms, whatever the block size: 8 bins of 5 ms, the current one and the 6
+// previous ones are read (as Brimstone).  The interface samples it every 25 ms without missing a peak.
+struct RecentPeak
+{
+    static const int kBins = 8;
+    static const int kRead = 7;
+    float bins[kBins] = {};
+    int cur = 0;
+    unsigned filled = 0;
+
+    void reset()
+    {
+        for (int i = 0; i < kBins; ++i)
+            bins[i] = 0.0f;
+        cur = 0;
+        filled = 0;
+    }
+
+    void add(const float v, const unsigned frames, const unsigned binLength)
+    {
+        bins[cur] = std::fmax(bins[cur], v);
+        filled += frames;
+        if (filled >= binLength)
+        {
+            cur = (cur + 1) % kBins;
+            bins[cur] = 0.0f;
+            filled = 0;
+        }
+    }
+
+    float value() const
+    {
+        float v = 0.0f;
+        for (int i = 0; i < kRead; ++i)
+            v = std::fmax(v, bins[(cur - i + kBins) % kBins]);
+        return v;
+    }
 };
 
 class TinplatePlugin : public Plugin
@@ -217,6 +282,8 @@ public:
         : Plugin(kParamCount, kTinplatePresetCount, kStateCount)
     {
         fHighCut.lowpass = true;
+        fHighCut.off = kHighCutOff;
+        fMonoBass.off = kMonoBassOff;
         for (uint32_t i = 0; i < kParamCount; ++i)
             fParams[i] = kTinplateRanges[i].def;
         allocate();
@@ -228,11 +295,11 @@ protected:
     const char* getDescription() const override
     {
         return "Plate reverb after CAPS PlateX2 (Plate2x2) by Tim Goetze: Dattorro's plate, "
-               "with pre-delay, low cut, width, freeze, ducking and clear.";
+               "with pre-delay, size, modulation, low and high cut, width, freeze, ducking and clear.";
     }
     const char* getMaker() const override { return "Tinplate"; }
     const char* getLicense() const override { return "GPL-3.0-or-later"; }
-    uint32_t getVersion() const override { return d_version(1, 1, 0); }
+    uint32_t getVersion() const override { return d_version(1, 2, 0); }
 
     void initParameter(const uint32_t index, Parameter& p) override
     {
@@ -307,6 +374,37 @@ protected:
             set(p, "Clear window", "window", "ms");
             p.hints |= kParameterIsLogarithmic;
             break;
+        case kParamStereoIn:
+            set(p, "Stereo input", "stereo", "");
+            p.hints |= kParameterIsBoolean | kParameterIsInteger;
+            break;
+        case kParamMonoBass:
+            set(p, "Mono bass", "monobass", "Hz");
+            p.hints |= kParameterIsLogarithmic;
+            break;
+        case kParamSync:
+            set(p, "Pre-delay sync", "sync", "");
+            p.hints |= kParameterIsBoolean | kParameterIsInteger;
+            break;
+        case kParamNote:
+            set(p, "Pre-delay note", "note", "");
+            p.hints |= kParameterIsInteger;
+            p.enumValues.count = TinplateNote::kCount;
+            p.enumValues.restrictedMode = true;
+            {
+                ParameterEnumerationValue* const v = new ParameterEnumerationValue[TinplateNote::kCount];
+                for (int i = 0; i < TinplateNote::kCount; ++i)
+                {
+                    v[i].label = TinplateNote::kNames[i];
+                    v[i].value = static_cast<float>(i);
+                }
+                p.enumValues.values = v;
+            }
+            break;
+        case kParamHistIn:     output(p, "History input", "hist_in", ""); break;
+        case kParamHistWet:    output(p, "History reverb", "hist_wet", ""); break;
+        case kParamHistCut:    output(p, "History cut", "hist_cut", "dB"); break;
+        case kParamHistClears: output(p, "History clearings", "hist_clears", ""); break;
         case kParamMeterClear:
             output(p, "Clear state", "meter_clear", "");
             p.ranges.min = 0.0f;
@@ -389,6 +487,8 @@ protected:
         const ScopedNoDenormals noDenormals;
         if (frames == 0)
             return;
+        const TimePosition& tp = getTimePosition();
+        fBpm = tp.bbt.valid && tp.bbt.beatsPerMinute > 1.0 ? tp.bbt.beatsPerMinute : TinplateNote::kDefaultBpm;
         setTargets(fRamp);
 
         const float* const inL = inputs[0];
@@ -396,13 +496,27 @@ protected:
         float* const outL = outputs[0];
         float* const outR = outputs[1];
         float peakIn = 0.0f, peakWet = 0.0f, peakOut = 0.0f, peakDuck = 0.0f;
+        const bool monoBass = !fMonoBass.identity();   // on, or its state not yet empty
 
         for (uint32_t i = 0; i < frames; ++i)
         {
             const float sl = inL[i], sr = inR[i];
             fNormal = -fNormal;
-            float x = (sl + sr + fNormal) * .5;
-            x = preDelay(x) * fInGain.next();
+            float dl, dr;
+            preDelay(sl, sr, dl, dr);
+            float x = (dl + dr + fNormal) * .5;
+            const float inGain = fInGain.next();
+            x = x * inGain;
+            // stereo input: t = 1, each channel into one half of the plate (t ramps on a change)
+            const bool stereo = fStereo.moving() || fStereo.cur != 0.0f;
+            float xa = x, xb = 0.0f, t = 0.0f;
+            if (stereo)
+            {
+                t = fStereo.next();
+                const float l = (dl + fNormal) * inGain;
+                xa = t == 1.0f ? l : x + (l - x) * t;
+                xb = (dr + fNormal) * inGain;
+            }
 
             if (fBandwidth.moving())
             {
@@ -428,18 +542,30 @@ protected:
 
             const float decay = fDecay.next();
             float wl, wr;
-            fPlate[fCur].process(x, decay, &wl, &wr);
+            if (stereo)
+                fPlate[fCur].processStereo(xa, xb, t, decay, &wl, &wr);
+            else
+                fPlate[fCur].process(x, decay, &wl, &wr);
             if (fFadeLeft > 0)
             {
                 // the old plate: input closed, fading out, then emptied
                 float ol, orr;
-                fPlate[1 - fCur].process(0.0f, decay, &ol, &orr);
+                if (stereo)
+                    fPlate[1 - fCur].processStereo(0.0f, 0.0f, t, decay, &ol, &orr);
+                else
+                    fPlate[1 - fCur].process(0.0f, decay, &ol, &orr);
                 const float g = 0.5f + 0.5f * std::cos(static_cast<float>(M_PI)
                                                        * (1.0f - static_cast<float>(fFadeLeft) / fFadeLength));
                 wl += ol * g;
                 wr += orr * g;
                 if (--fFadeLeft == 0)
                     fPlate[1 - fCur].activate();
+            }
+            if (stereo && t == 0.0f)
+            {
+                // back to the mono input: the second channel is emptied, then no longer computed
+                fPlate[0].resetInput2();
+                fPlate[1].resetInput2();
             }
             if (fFlash > 0)
                 --fFlash;
@@ -448,10 +574,15 @@ protected:
                 fLowCut.process(wl, wr);
             if (!fHighCut.identity())
                 fHighCut.process(wl, wr);
-            if (fWidth.moving() || fWidth.cur != 1.0f)
+            if (fWidth.moving() || fWidth.cur != 1.0f || monoBass)
             {
+                // mono bass: the side signal high-passed (the mid untouched), then the width
                 const float w = fWidth.next();
-                const float m = (wl + wr) * 0.5f, s = (wl - wr) * 0.5f * w;
+                const float m = (wl + wr) * 0.5f;
+                float s = (wl - wr) * 0.5f;
+                if (monoBass)
+                    fMonoBass.process1(s);
+                s = s * w;
                 wl = m + s;
                 wr = m - s;
             }
@@ -498,6 +629,16 @@ protected:
         fParams[kParamMeterOut] = gainToDb(fMeterOut, -60.0f);
         fParams[kParamMeterDuck] = peakDuck;
         fParams[kParamMeterClear] = fFlash > 0 ? 2.0f : fArmed ? 1.0f : 0.0f;
+
+        // history: peaks of the last ~30 ms, count of the clearings
+        const unsigned bin = static_cast<unsigned>(0.005 * getSampleRate()) + 1;
+        fRecentIn.add(peakIn, frames, bin);
+        fRecentWet.add(peakWet, frames, bin);
+        fRecentCut.add(peakDuck, frames, bin);
+        fParams[kParamHistIn] = std::fmin(fRecentIn.value(), 2.0f);
+        fParams[kParamHistWet] = std::fmin(fRecentWet.value(), 2.0f);
+        fParams[kParamHistCut] = fRecentCut.value();
+        fParams[kParamHistClears] = static_cast<float>(fClears % 1000u);
     }
 
 private:
@@ -524,8 +665,9 @@ private:
         const double sr = getSampleRate();
         fPlate[0].init(static_cast<float>(sr));
         fPlate[1].init(static_cast<float>(sr));
-        const unsigned n = PlateCore::nextPowerOf2(static_cast<unsigned>(0.001 * kTinplateRanges[kParamPredelay].max * sr) + 2);
-        fPre.assign(n, 0.0f);
+        const unsigned n = PlateCore::nextPowerOf2(static_cast<unsigned>(0.001 * kPredelayMaxMs * sr) + 2);
+        fPre[0].assign(n, 0.0f);
+        fPre[1].assign(n, 0.0f);
         fPreMask = n - 1;
     }
 
@@ -558,6 +700,8 @@ private:
             fDry.set(TinplateLaw::levelGain(fParams[kParamDry]), n);
         }
         fWidth.set(fParams[kParamWidth] * 0.01f, n);
+        fStereo.set(fParams[kParamStereoIn] > 0.5f ? 1.0f : 0.0f, n);
+        fMonoBass.set(fParams[kParamMonoBass], sr, n);
         fGain.set(fParams[kParamOutput] == 0.0f ? 1.0f : dbToGain(fParams[kParamOutput]), n);
         fBypass.set(fParams[kParamBypass] > 0.5f ? 1.0f : 0.0f, ramp ? static_cast<int>(0.01 * sr) : 0);
         fLowCut.set(fParams[kParamLowCut], sr, n);
@@ -579,7 +723,10 @@ private:
         fRiseMax = std::max(1, static_cast<int>(1e-3 * fParams[kParamWindow] * sr));
         fFlashLength = static_cast<int>(0.2 * sr);
 
-        const unsigned pd = static_cast<unsigned>(std::lround(fParams[kParamPredelay] * 1e-3 * sr));
+        // pre-delay: ms, or a note value at the tempo of the host
+        const double preMs = fParams[kParamSync] > 0.5f ? TinplateNote::ms(fParams[kParamNote], fBpm)
+                                                        : static_cast<double>(fParams[kParamPredelay]);
+        const unsigned pd = static_cast<unsigned>(std::lround(preMs * 1e-3 * sr));
         if (!ramp)
         {
             fPreCur = fPreNext = std::min(pd, fPreMask - 1);
@@ -643,24 +790,28 @@ private:
             fPlate[fCur].finishGlide();   // empty: its lengths go to the size at once
             fFadeLength = fFadeLeft = std::max(1, static_cast<int>(1e-3 * fParams[kParamFade] * getSampleRate()));
             fFlash = fFlashLength;
+            ++fClears;
         }
         else if (++fRise > fRiseMax)
             fArmed = false;       // too slow for an attack
     }
 
-    float preDelay(const float x)
+    // both channels delayed (pre-delay 0: the same samples)
+    void preDelay(const float l, const float r, float& dl, float& dr)
     {
-        fPre[fPrePos] = x;
-        float y = fPre[(fPrePos - fPreCur) & fPreMask];
+        fPre[0][fPrePos] = l;
+        fPre[1][fPrePos] = r;
+        dl = fPre[0][(fPrePos - fPreCur) & fPreMask];
+        dr = fPre[1][(fPrePos - fPreCur) & fPreMask];
         if (fPreFade > 0)
         {
             const float t = 1.0f - static_cast<float>(fPreFade) / fPreFadeLength;
-            y += (fPre[(fPrePos - fPreNext) & fPreMask] - y) * t;
+            dl += (fPre[0][(fPrePos - fPreNext) & fPreMask] - dl) * t;
+            dr += (fPre[1][(fPrePos - fPreNext) & fPreMask] - dr) * t;
             if (--fPreFade == 0)
                 fPreCur = fPreNext;
         }
         fPrePos = (fPrePos + 1) & fPreMask;
-        return y;
     }
 
     void resetState()
@@ -679,11 +830,17 @@ private:
         fWet.reset(0.0f);
         fDry.reset(0.0f);
         fWidth.reset(0.0f);
+        fStereo.reset(0.0f);
         fGain.reset(0.0f);
         fBypass.reset(0.0f);
         fLowCut.reset(fParams[kParamLowCut], getSampleRate());
         fHighCut.reset(fParams[kParamHighCut], getSampleRate());
-        std::fill(fPre.begin(), fPre.end(), 0.0f);
+        fMonoBass.reset(fParams[kParamMonoBass], getSampleRate());
+        std::fill(fPre[0].begin(), fPre[0].end(), 0.0f);
+        std::fill(fPre[1].begin(), fPre[1].end(), 0.0f);
+        fRecentIn.reset();
+        fRecentWet.reset();
+        fRecentCut.reset();
         fPrePos = 0;
         fRamp = false;
         setTargets(false);
@@ -698,9 +855,12 @@ private:
     PlateCore::Plate fPlate[2];    // clear: the current one fCur, the other one fading out or empty
     float fNormal = 1e-20f;        // NOISE_FLOOR of CAPS
     bool fRamp = false;
-    Ramp<float> fBandwidth, fDecay, fDamping, fInGain, fModulation, fWet, fDry, fWidth, fGain, fBypass;
-    Cut2 fLowCut, fHighCut;
-    std::vector<float> fPre;
+    Ramp<float> fBandwidth, fDecay, fDamping, fInGain, fModulation, fWet, fDry, fWidth, fStereo, fGain, fBypass;
+    Cut2 fLowCut, fHighCut, fMonoBass;   // mono bass: high-pass of the side signal
+    std::vector<float> fPre[2];          // pre-delay of the left and right channels
+    double fBpm = TinplateNote::kDefaultBpm;
+    RecentPeak fRecentIn, fRecentWet, fRecentCut;
+    unsigned fClears = 0;
     unsigned fPreMask = 0, fPrePos = 0, fPreCur = 0, fPreNext = 0;
     int fPreFade = 0, fPreFadeLength = 1;
     float fMeterIn = 0.0f, fMeterWet = 0.0f, fMeterOut = 0.0f;

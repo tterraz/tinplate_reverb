@@ -34,6 +34,14 @@
  *     steady size); 200 %: finite output, longer decay than 100 %.
  * 15. Modulation: a change of rate or depth while playing gives no click; depth 200 % and rate
  *     5 Hz: finite output; depth 0: no modulation (output different from 100 %).
+ * 16. Stereo input: centred input gives the output of the mono input; an input on one side gives
+ *     a reverb louder on that side over its first 100 ms (the mono input: balanced); switching
+ *     while playing: no click.
+ * 17. Mono bass: the side of the reverb loses >= 20 dB at 50 Hz with mono bass at 200 Hz, nothing
+ *     at 2 kHz; the mid is untouched.
+ * 18. Pre-delay locked to the tempo: the response starts a note value later at the tempo of the
+ *     host (120 BPM without one; at most 2 s).
+ * 19. History outputs: input and reverb peaks, cut of the ducking, count of the clearings.
  * 13. Link: the parameter Mix sets dry and wet as the blend of CAPS; the levels are ignored,
  *     even automated; automation of Mix gives, after the ramp, the output of the new mix.
  */
@@ -81,6 +89,7 @@ static Settings originalSettings(const float bw, const float tail, const float d
 }
 
 static const uint32_t kSizes[] = { 1, 7, 64, 333, 512 };
+static double gBpm = 0.0;   // tempo given by the "host" to process(); 0: none
 
 // a change of the settings at a given sample (applied at the start of the block holding it)
 struct Change {
@@ -100,6 +109,10 @@ static void process(const Settings& s, const double sr, const std::vector<float>
         p.setParameterValue(i, s.values[i]);
     p.setParameterValue(kParamFreeze, s.freeze);
     p.setParameterValue(kParamBypass, s.bypass);
+    TimePosition tp;
+    tp.bbt.valid = gBpm > 0.0;
+    tp.bbt.beatsPerMinute = gBpm;
+    p.setTimePosition(tp);
     p.activate();
 
     const size_t N = L.size();
@@ -781,6 +794,154 @@ int main()
             d = std::max(d, static_cast<double>(std::fabs(oL[i] - rL[i])));
         std::snprintf(buf, sizeof(buf), "depth 0: output differs from depth 100 %% by up to %.3f", d);
         check(d > 1e-3, buf);
+    }
+
+    // 16. stereo input --------------------------------------------------------------------------
+    std::printf("16. stereo input\n");
+    {
+        const size_t n = static_cast<size_t>(2.0 * sr);
+        std::mt19937 rng(5);
+        std::uniform_real_distribution<float> u(-0.5f, 0.5f);
+        std::vector<float> x(n, 0.0f), zero(n, 0.0f);
+        for (size_t i = 0; i < static_cast<size_t>(0.05 * sr); ++i)
+            x[i] = u(rng);   // a short burst
+        Settings s = originalSettings(0.8f, 0.6f, 0.4f, 1.0f);
+        process(s, sr, x, x, rL, rR);
+        s.values[kParamStereoIn] = 1.0f;
+        process(s, sr, x, x, oL, oR);
+        double d = 0.0;
+        for (size_t i = 0; i < n; ++i)
+            d = std::max(d, std::max<double>(std::fabs(oL[i] - rL[i]), std::fabs(oR[i] - rR[i])));
+        char buf[160];
+        std::snprintf(buf, sizeof(buf), "centred input (L == R): same output as the mono input (gap %.1e of %.2f)", d,
+                      peakOf(rL));
+        check(d < 1e-5 * peakOf(rL), buf);
+
+        // burst on the left only: energy of each output over the first 100 ms of the reverb (the
+        // two halves of the tank exchange their energy at each round: the tail ends near the centre)
+        const size_t e = static_cast<size_t>(0.1 * sr);
+        const auto side = [&](const std::vector<float>& a, const std::vector<float>& b) {
+            return db(rms(a, 0, e) / rms(b, 0, e));
+        };
+        s.values[kParamStereoIn] = 0.0f;
+        process(s, sr, x, zero, rL, rR);
+        s.values[kParamStereoIn] = 1.0f;
+        process(s, sr, x, zero, oL, oR);
+        const double mono = side(rL, rR), stereo = side(oL, oR);
+        process(s, sr, zero, x, oL, oR);
+        const double right = side(oL, oR);
+        std::snprintf(buf, sizeof(buf), "input on the left: L / R of the reverb %+.1f dB (mono input %+.1f dB); "
+                      "on the right: %+.1f dB", stereo, mono, right);
+        check(stereo > 6.0 && right < -6.0 && std::fabs(mono) < 1.5, buf);
+
+        // switched on and off while a tone plays: no click
+        std::vector<float> tl(n), tr(n);
+        for (size_t i = 0; i < n; ++i)
+        {
+            tl[i] = 0.3f * static_cast<float>(std::sin(2.0 * M_PI * 220.0 * i / sr));
+            tr[i] = 0.3f * static_cast<float>(std::sin(2.0 * M_PI * 330.0 * i / sr));
+        }
+        const size_t at = static_cast<size_t>(0.8 * sr), back = static_cast<size_t>(1.3 * sr);
+        const auto maxStep = [&](const std::vector<float>& y, const size_t a, const size_t b) {
+            float m = 0.0f;
+            for (size_t i = a; i < b; ++i)
+                m = std::max(m, std::fabs(y[i] - y[i - 1]));
+            return m;
+        };
+        s.values[kParamStereoIn] = 0.0f;
+        process(s, sr, tl, tr, rL, rR);
+        process(s, sr, tl, tr, oL, oR, { { at, kParamStereoIn, 1.0f }, { back, kParamStereoIn, 0.0f } });
+        const float steady = std::max(maxStep(rL, at, n), maxStep(rR, at, n));
+        const float moved = std::max(maxStep(oL, at, n), maxStep(oR, at, n));
+        std::snprintf(buf, sizeof(buf), "on, then off again while playing: largest step %.4f (steady %.4f)", moved, steady);
+        check(moved < 1.5f * steady, buf);
+    }
+
+    // 17. mono bass ------------------------------------------------------------------------------
+    std::printf("17. mono bass\n");
+    {
+        const size_t n = static_cast<size_t>(2.0 * sr), a = n / 2;
+        const auto sideOverMid = [&](const std::vector<float>& yL, const std::vector<float>& yR) {
+            std::vector<float> m(n), sd(n);
+            for (size_t i = 0; i < n; ++i)
+            {
+                m[i] = (yL[i] + yR[i]) * 0.5f;
+                sd[i] = (yL[i] - yR[i]) * 0.5f;
+            }
+            return std::make_pair(rms(sd, a, n), rms(m, a, n));
+        };
+        char buf[160];
+        for (const double hz : { 50.0, 2000.0 })
+        {
+            std::vector<float> tone(n);
+            for (size_t i = 0; i < n; ++i)
+                tone[i] = 0.4f * static_cast<float>(std::sin(2.0 * M_PI * hz * i / sr));
+            Settings s = originalSettings(1.0f, 0.6f, 0.2f, 1.0f);
+            process(s, sr, tone, tone, rL, rR);
+            s.values[kParamMonoBass] = 200.0f;
+            process(s, sr, tone, tone, oL, oR);
+            const auto off = sideOverMid(rL, rR), on = sideOverMid(oL, oR);
+            const double sideLoss = db(on.first / off.first), midLoss = db(on.second / off.second);
+            std::snprintf(buf, sizeof(buf), "%4.0f Hz, mono bass 200 Hz: side %+.1f dB, mid %+.2f dB", hz, sideLoss,
+                          midLoss);
+            check(std::fabs(midLoss) < 1e-3 && (hz < 100.0 ? sideLoss < -20.0 : std::fabs(sideLoss) < 0.5), buf);
+        }
+    }
+
+    // 18. pre-delay locked to the tempo ----------------------------------------------------------
+    std::printf("18. pre-delay locked to the tempo\n");
+    {
+        const auto onset = [](const std::vector<float>& x) {
+            for (size_t i = 0; i < x.size(); ++i)
+                if (std::fabs(x[i]) > 1e-9f)
+                    return i;
+            return x.size();
+        };
+        std::vector<float> one(static_cast<size_t>(2.5 * sr), 0.0f);
+        one[0] = 1.0f;
+        Settings s = originalSettings(0.8f, 0.6f, 0.4f, 1.0f);
+        s.values[kParamPredelay] = 50.0f;   // ignored when locked
+        gBpm = 0.0;
+        process(s, sr, one, one, rL, rR);
+        const size_t base = onset(rL) - static_cast<size_t>(std::lround(0.05 * sr));
+        s.values[kParamSync] = 1.0f;
+        struct Case { double bpm; int note; double ms; };
+        const Case cases[] = { { 100.0, 9, 300.0 }, { 0.0, 9, 250.0 }, { 140.0, 7, 1000.0 / 7.0 }, { 90.0, 8, 250.0 },
+                               { 20.0, 12, 2000.0 } };
+        for (const Case& c : cases)
+        {
+            gBpm = c.bpm;
+            s.values[kParamNote] = static_cast<float>(c.note);
+            process(s, sr, one, one, oL, oR);
+            const size_t d = static_cast<size_t>(std::lround(c.ms * 1e-3 * sr));
+            char buf[160];
+            std::snprintf(buf, sizeof(buf), "%s at %s: response %zu samples later (%.1f ms)",
+                          TinplateNote::kNames[c.note], c.bpm > 0.0 ? std::to_string(static_cast<int>(c.bpm)).c_str() : "no tempo (120)",
+                          onset(oL) - base, c.ms);
+            check(onset(oL) == base + d && onset(oR) == onset(rR) - onset(rL) + base + d, buf);
+        }
+        gBpm = 0.0;
+    }
+
+    // 19. history outputs ------------------------------------------------------------------------
+    std::printf("19. history outputs\n");
+    {
+        const size_t n = static_cast<size_t>(1.5 * sr), A = static_cast<size_t>(0.6 * sr);
+        std::vector<float> x(n, 0.0f);
+        for (size_t i = 0; i < static_cast<size_t>(0.2 * sr); ++i)
+            x[i] = 0.25f * static_cast<float>(std::sin(2.0 * M_PI * 440.0 * i / sr));
+        for (size_t i = A; i < n; ++i)
+            x[i] = 0.5f * static_cast<float>(std::cos(2.0 * M_PI * 330.0 * (i - A) / sr));
+        Settings s = originalSettings(0.8f, 0.8f, 0.3f, 1.0f);
+        s.values[kParamClear] = 1.0f;
+        s.values[kParamDuck] = 12.0f;
+        float outs[kParamCount] = {};
+        process(s, sr, x, x, oL, oR, {}, outs);
+        char buf[160];
+        std::snprintf(buf, sizeof(buf), "input %.3f (0.5), reverb %.3f, cut %.1f dB, clearings %.0f (2 attacks)", outs[kParamHistIn],
+                      outs[kParamHistWet], outs[kParamHistCut], outs[kParamHistClears]);
+        check(std::fabs(outs[kParamHistIn] - 0.5f) < 1e-3f && outs[kParamHistWet] > 0.0f && outs[kParamHistCut] > 5.0f
+              && outs[kParamHistClears] == 2.0f, buf);
     }
 
     std::printf("%s\n", gFailures == 0 ? "all DSP tests passed" : "DSP TESTS FAILED");

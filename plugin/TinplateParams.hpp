@@ -40,6 +40,10 @@ enum TinplateParam {
     kParamTrigger,        // clear: the input over this level soon after triggers, dBFS
     kParamFade,           // clear: fade out of the old plate, ms
     kParamWindow,         // clear: longest rise from Floor to Trigger of an attack, ms
+    kParamStereoIn,       // option: L and R each feed one half of the plate (0: their mono sum, the original)
+    kParamMonoBass,       // option: the reverb is mono below this frequency, Hz (minimum = off)
+    kParamSync,           // pre-delay locked to the tempo of the host (0/1)
+    kParamNote,           // pre-delay when locked: note value, index into TinplateNote (0..12)
     kParamFreeze,         // infinite tail: input of the tank closed, no loss in the tank (0/1)
     kParamBypass,         // host bypass
     // outputs
@@ -48,6 +52,10 @@ enum TinplateParam {
     kParamMeterOut,       // output peak, dBFS
     kParamMeterDuck,      // cut of the reverb by the ducking, dB (positive)
     kParamMeterClear,     // clear: 0 off or waiting, 1 armed, 2 just cleared (held 200 ms)
+    kParamHistIn,         // history: input peak over the last ~30 ms, linear
+    kParamHistWet,        // history: reverb peak (after the ducking) over the last ~30 ms, linear
+    kParamHistCut,        // history: largest cut of the ducking over the last ~30 ms, dB
+    kParamHistClears,     // history: count of the clearings, modulo 1000
     kParamCount
 };
 
@@ -81,6 +89,10 @@ static const TinplateRange kTinplateRanges[kParamCount] = {
     { -60.0f,    0.0f, -20.0f },    // trigger, dBFS
     {  10.0f,  500.0f,  60.0f },    // fade, ms
     {   1.0f,  200.0f,  20.0f },    // window, ms
+    {   0.0f,    1.0f,   0.0f },    // stereo input
+    {  20.0f,  500.0f,  20.0f },    // mono bass, Hz (20 = off)
+    {   0.0f,    1.0f,   0.0f },    // pre-delay sync
+    {   0.0f,   12.0f,   6.0f },    // pre-delay note (1/16)
     {   0.0f,    1.0f,   0.0f },    // freeze
     {   0.0f,    1.0f,   0.0f },    // bypass
     { -60.0f,    6.0f, -60.0f },    // meter in
@@ -88,14 +100,20 @@ static const TinplateRange kTinplateRanges[kParamCount] = {
     { -60.0f,    6.0f, -60.0f },    // meter out
     {   0.0f,   30.0f,   0.0f },    // meter duck, dB
     {   0.0f,    2.0f,   0.0f },    // meter clear
+    {   0.0f,    2.0f,   0.0f },    // history in
+    {   0.0f,    2.0f,   0.0f },    // history wet
+    {   0.0f,   30.0f,   0.0f },    // history cut, dB
+    {   0.0f, 1000.0f,   0.0f },    // history clearings
 };
 
 static const float kLowCutOff = 20.0f;   // low cut at its minimum: no filter
 static const float kHighCutOff = 20000.0f;   // high cut at its maximum: no filter
 static const float kLevelOff = -60.0f;   // dry and wet faders at their minimum: gain 0
+static const float kMonoBassOff = 20.0f;   // mono bass at its minimum: no filter
+static const float kPredelayMaxMs = 2000.0f;   // longest pre-delay, locked to the tempo (1/4 at 30 BPM)
 
 // ------------------------------------------------------------------------------------------------
-// Factory presets: values of the parameters kParamBandwidth .. kParamWindow (freeze and bypass
+// Factory presets: values of the parameters kParamBandwidth .. kParamNote (freeze and bypass
 // excluded).
 
 static const int kPresetParamCount = kParamFreeze;
@@ -108,27 +126,76 @@ struct TinplatePreset {
 static const TinplatePreset kTinplatePresets[] = {
     //                      bandw  tail  damp   size   depth  rate  wet   dry   link  mix   pre   lowcut hicut  width  out
     //                      duck  thresh  att  rel  clear  floor  trigger  fade  window
+    //                      stereo  monobass  sync  note
     { "Default",          { 0.80f, 0.55f, 0.40f, 100.0f, 100.0f, 1.2f, -16.0f, -1.5f, 0.0f, 0.30f, 12.0f, 60.0f, 20000.0f,
-                            100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+                            100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
+                            0.0f, 20.0f, 0.0f, 6.0f } },
     { "Original (CAPS)",  { 0.50f, 0.50f, 0.75f, 100.0f, 100.0f, 1.2f, -18.4f, -1.1f, 0.0f, 0.25f, 0.0f, 20.0f, 20000.0f,
-                            100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+                            100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
+                            0.0f, 20.0f, 0.0f, 6.0f } },
     { "Vocal plate",      { 0.85f, 0.45f, 0.45f, 100.0f, 100.0f, 1.2f, -18.4f, -1.1f, 0.0f, 0.25f, 35.0f, 150.0f, 20000.0f,
-                            110.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+                            110.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
+                            0.0f, 20.0f, 0.0f, 6.0f } },
     { "Drum plate",       { 0.90f, 0.30f, 0.30f, 100.0f, 100.0f, 1.2f, -20.1f, -0.9f, 0.0f, 0.22f, 5.0f, 200.0f, 20000.0f,
-                            120.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+                            120.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
+                            0.0f, 20.0f, 0.0f, 6.0f } },
     { "Ambience",         { 0.70f, 0.15f, 0.50f, 100.0f, 100.0f, 1.2f, -21.4f, -0.8f, 0.0f, 0.20f, 0.0f, 100.0f, 20000.0f,
-                            130.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+                            130.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
+                            0.0f, 20.0f, 0.0f, 6.0f } },
     { "Dark and long",    { 0.55f, 0.85f, 0.75f, 100.0f, 100.0f, 1.2f, -14.0f, -1.9f, 0.0f, 0.35f, 20.0f, 60.0f, 20000.0f,
-                            100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+                            100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
+                            0.0f, 20.0f, 0.0f, 6.0f } },
     { "Bright and wide",  { 1.00f, 0.70f, 0.10f, 100.0f, 100.0f, 1.2f, -16.0f, -1.5f, 0.0f, 0.30f, 15.0f, 120.0f, 20000.0f,
-                            150.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+                            150.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
+                            0.0f, 20.0f, 0.0f, 6.0f } },
     { "Send (100 % wet)", { 0.80f, 0.60f, 0.40f, 100.0f, 100.0f, 1.2f, 0.0f, -60.0f, 0.0f, 1.00f, 20.0f, 100.0f, 20000.0f,
-                            100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+                            100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
+                            0.0f, 20.0f, 0.0f, 6.0f } },
     { "Ducked vocal",     { 0.85f, 0.65f, 0.45f, 100.0f, 100.0f, 1.2f, -14.0f, -1.9f, 0.0f, 0.35f, 25.0f, 150.0f, 20000.0f,
-                            110.0f, 0.0f, 12.0f, -30.0f, 10.0f, 400.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f } },
+                            110.0f, 0.0f, 12.0f, -30.0f, 10.0f, 400.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
+                            0.0f, 20.0f, 0.0f, 6.0f } },
+    { "Piano (clear)",    { 0.80f, 0.70f, 0.45f, 120.0f, 100.0f, 1.2f, -16.0f, -1.5f, 1.0f, 0.30f, 15.0f, 80.0f, 20000.0f,
+                            120.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 1.0f, -50.0f, -20.0f, 120.0f, 40.0f,
+                            1.0f, 20.0f, 0.0f, 6.0f } },
+    { "Snare (clear)",    { 0.95f, 0.50f, 0.25f, 90.0f, 100.0f, 1.2f, -18.4f, -1.1f, 1.0f, 0.25f, 0.0f, 200.0f, 12000.0f,
+                            130.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 1.0f, -45.0f, -15.0f, 40.0f, 10.0f,
+                            0.0f, 20.0f, 1.0f, 3.0f } },
+    { "Guitar (stereo)",  { 0.80f, 0.60f, 0.40f, 110.0f, 120.0f, 0.8f, -16.9f, -1.3f, 1.0f, 0.28f, 20.0f, 120.0f, 20000.0f,
+                            140.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
+                            1.0f, 150.0f, 0.0f, 6.0f } },
 };
 
 static const int kTinplatePresetCount = sizeof(kTinplatePresets) / sizeof(kTinplatePresets[0]);
+
+// ------------------------------------------------------------------------------------------------
+// Pre-delay locked to the tempo: note values from 1/64 to 1/4, dotted and triplet, by length
+
+namespace TinplateNote {
+
+static const int kCount = 13;
+static const char* const kNames[kCount] = {
+    "1/64", "1/32 T", "1/64 D", "1/32", "1/16 T", "1/32 D", "1/16", "1/8 T", "1/16 D", "1/8", "1/4 T", "1/8 D", "1/4"
+};
+// length in quarter notes (beats)
+static const double kBeats[kCount] = {
+    1.0 / 16, 1.0 / 12, 3.0 / 32, 1.0 / 8, 1.0 / 6, 3.0 / 16, 1.0 / 4, 1.0 / 3, 3.0 / 8, 1.0 / 2, 2.0 / 3, 3.0 / 4, 1.0
+};
+static const double kDefaultBpm = 120.0;   // when the host gives no tempo
+
+static inline int index(const float v)
+{
+    const int i = static_cast<int>(std::lround(v));
+    return i < 0 ? 0 : i >= kCount ? kCount - 1 : i;
+}
+
+// length of a note value at a tempo, ms, at most kPredelayMaxMs
+static inline double ms(const float note, const double bpm)
+{
+    const double b = bpm > 1.0 ? bpm : kDefaultBpm;
+    return std::fmin(kBeats[index(note)] * 60000.0 / b, kPredelayMaxMs);
+}
+
+}   // namespace TinplateNote
 
 // States saved with the project, written by the UI only (the DSP ignores them)
 enum { kStateAB = 0, kStateCount };

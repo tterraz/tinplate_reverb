@@ -4,14 +4,17 @@
  * Copyright (C) 2026 Tinplate authors
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Everything is drawn in a logical 900 x 730 space, scaled to the window size (resizable,
+ * Everything is drawn in a logical 900 x 858 space, scaled to the window size (resizable,
  * aspect ratio kept).  Three sections, left to right in the order of the signal:
- *   1 INPUT (pre-delay, bandwidth) -> 2 PLATE (tail, damping, freeze, decay time)
- *   -> 3 OUTPUT (width, low cut; faders DRY, REVERB, OUTPUT; meters),
+ *   1 INPUT (pre-delay, free or locked to the tempo: SYNC; bandwidth) -> 2 PLATE (tail, damping,
+ *   size, modulation, freeze, decay time) -> 3 OUTPUT (width, low and high cut; faders DRY,
+ *   REVERB, OUTPUT; meters),
  * below them 4 DUCKING (duck, threshold, attack, release, cut meter) and 5 CLEAR (on / off,
- * floor, trigger, fade, state),
+ * floor, trigger, fade, state), then 6 HISTORY (input and reverb peaks, cut of the ducking,
+ * clearings, with the thresholds, over the last 3, 7 or 30 s),
  * and at the bottom the decay time (RT60) of the plate against frequency with the tone of the wet
- * signal (bandwidth and low cut).
+ * signal (bandwidth, low and high cut).
+ * OPTIONS (header): a small panel with the stereo input and the mono bass.
  * Knobs: drag vertically (Shift = fine), mouse wheel, double-click or Ctrl+click = default,
  * right-click = type a value (Enter / Escape).  Every control has a tooltip.
  * A / B: two sets of settings to compare (header: A | B, copy to the other); the inactive one is
@@ -44,7 +47,7 @@ START_NAMESPACE_DISTRHO
 using DGL_NAMESPACE::Color;
 
 static const float kW = 900.0f;
-static const float kH = 730.0f;
+static const float kH = 858.0f;
 static const float kPi = 3.14159265358979f;
 static const float kArcStart = 0.75f * kPi;
 static const float kArcSweep = 1.5f * kPi;
@@ -140,13 +143,17 @@ static const Rect kSecTank = { 250, 70, 370, 380 };
 static const Rect kSecOut  = { 630, 70, 250, 380 };
 static const Rect kSecDuck = { 20, 460, 425, 122 };
 static const Rect kSecClear = { 455, 460, 425, 122 };
-static const Rect kDecay   = { 20, 592, 860, 128 };
-static const Rect kPlot    = { 150, 600, 680, 104 };   // decay time against frequency
+static const Rect kHistory = { 20, 592, 860, 118 };
+static const Rect kHistPlot = { 150, 602, 680, 90 };   // history: dBFS against time
+static const Rect kHistLengthBox = { 30, 688, 92, 14 }; // history length, under the legend
+static const Rect kDecay   = { 20, 720, 860, 128 };
+static const Rect kPlot    = { 150, 728, 680, 104 };   // decay time against frequency
 
 // knobs and faders (a fader: cx, cy = centre of its track, r = half its length)
 enum { kKnobPredelay = 0, kKnobBandwidth, kKnobTail, kKnobDamping, kKnobWet, kKnobWidth, kKnobLowCut,
        kKnobOutput, kKnobDuck, kKnobThreshold, kKnobAttack, kKnobRelease, kKnobFloor, kKnobTrigger, kKnobFade,
-       kKnobWindow, kKnobDry, kKnobSize, kKnobHighCut, kKnobModDepth, kKnobModRate, kNumKnobs };
+       kKnobWindow, kKnobDry, kKnobSize, kKnobHighCut, kKnobModDepth, kKnobModRate, kKnobNote, kKnobMonoBass,
+       kNumKnobs };
 
 struct KnobDef {
     int param;
@@ -215,6 +222,12 @@ static constexpr KnobDef kKnobs[kNumKnobs] = {
     { kParamModRate,   585.0f, 318.0f, 16.0f, "RATE",
       "Rate of the modulation of the plate, 0.1 to 5 Hz. 1.2 Hz: the original. A change keeps the "
       "phase (no click)." },
+    { kParamNote,      130.0f, 162.0f, 44.0f, "PRE-DELAY",
+      "Pre-delay locked to the tempo of the host (SYNC on): a note value, 1/64 to 1/4, dotted (D) or "
+      "triplet (T); 120 BPM when the host gives no tempo, at most 2 s. A change of tempo crossfades." },
+    { kParamMonoBass,  826.0f, 108.0f, 18.0f, "MONO BASS",
+      "The reverb is mono below this frequency (its side signal high-passed, 12 dB / octave): a "
+      "steadier low end, safe in mono. At the minimum: off." },
 };
 
 // kKnobs follows the order of the enum above
@@ -228,14 +241,19 @@ static_assert(kKnobs[kKnobPredelay].param == kParamPredelay && kKnobs[kKnobBandw
               && kKnobs[kKnobFade].param == kParamFade && kKnobs[kKnobWindow].param == kParamWindow
               && kKnobs[kKnobDry].param == kParamDry && kKnobs[kKnobSize].param == kParamSize
               && kKnobs[kKnobHighCut].param == kParamHighCut && kKnobs[kKnobModDepth].param == kParamModDepth
-              && kKnobs[kKnobModRate].param == kParamModRate,
+              && kKnobs[kKnobModRate].param == kParamModRate && kKnobs[kKnobNote].param == kParamNote
+              && kKnobs[kKnobMonoBass].param == kParamMonoBass,
               "kKnobs: one entry per knob, in the order of the enum");
 
 static const Rect kFreeze  = { 270, 303, 104, 30 };
 static const Rect kRt      = { 270, 372, 330, 72 };    // decay time readout
-static const Rect kPreset  = { 384, 16, 196, 26 };     // drop-down box; the list opens below it
-static const Rect kAB      = { 588, 17, 50, 24 };      // A | B
-static const Rect kCopy    = { 642, 17, 34, 24 };      // copy the current set to the other
+static const Rect kPreset  = { 344, 16, 176, 26 };     // drop-down box; the list opens below it
+static const Rect kAB      = { 528, 17, 48, 24 };      // A | B
+static const Rect kCopy    = { 580, 17, 34, 24 };      // copy the current set to the other
+static const Rect kOptions = { 622, 17, 72, 24 };      // opens the options panel
+static const Rect kOptionsPanel = { 600, 50, 280, 132 };   // options: stereo input, mono bass
+static const Rect kStereoBtn = { 616, 86, 132, 28 };       // in the options panel
+static const Rect kSync    = { 186, 200, 44, 18 };     // pre-delay locked to the tempo
 static const float kMenuItemH = 22.0f;     // preset list: item
 static const float kMenuHeaderH = 20.0f;   // section title (FACTORY, USER)
 static const float kMenuDividerH = 9.0f;   // line before "Save current settings..."
@@ -248,8 +266,8 @@ struct MenuRow {
     int index;    // factory preset, saved preset (in fUserNames) or section (0 factory, 1 user)
     float y, h;   // y from the top of the list content
 };
-static const Rect kTheme   = { 684, 17, 76, 24 };
-static const Rect kBypass  = { 768, 14, 108, 30 };
+static const Rect kTheme   = { 702, 17, 72, 24 };
+static const Rect kBypass  = { 782, 14, 98, 30 };
 
 // meters: three horizontal bars in the output section
 static const float kMeterX = 690.0f, kMeterW = 132.0f, kMeterH = 9.0f;
@@ -262,7 +280,8 @@ static const Rect kClearState = { 470, 540, 84, 30 };             // off, waitin
 // hover zones with a tooltip (knobs are handled separately)
 enum {
     kZoneFreeze = 0, kZoneRt, kZonePlot, kZonePreset, kZoneBypass, kZoneTheme, kZoneAB, kZoneCopy,
-    kZoneIn, kZoneWet, kZoneOut, kZoneDuckMeter, kZoneClear, kZoneClearState, kZoneLink, kNumZones
+    kZoneIn, kZoneWet, kZoneOut, kZoneDuckMeter, kZoneClear, kZoneClearState, kZoneLink, kZoneOptions,
+    kZoneStereo, kZoneSync, kZoneHistory, kZoneHistLength, kNumZones
 };
 
 struct Zone {
@@ -311,9 +330,31 @@ static const Zone kZones[kNumZones] = {
       "Links the Dry and Reverb faders as the Blend of the original: raising one lowers the "
       "other (their gains add up to 1, both at most 0 dB). When linking, the Dry fader sets the "
       "mix. Linked, both show one parameter, Mix, which the host automates." },
+    { kOptions, "OPTIONS",
+      "Stereo input and mono bass. The dot is lit when one of them is on." },
+    { kStereoBtn, "STEREO INPUT",
+      "Off (the original): the plate takes the mono sum of L and R. On: each channel feeds its own "
+      "half of the plate, the onset of the reverb follows the panning (the tail ends near the centre). "
+      "A centred sound gives the same reverb either way." },
+    { kSync, "SYNC",
+      "Locks the pre-delay to the tempo of the host: the knob then sets a note value (1/64 to 1/4, "
+      "dotted or triplet)." },
+    { kHistPlot, "HISTORY",
+      "Last seconds, dBFS: input peak (steel), reverb after the ducking (brass), cut of the ducking "
+      "(shaded from the top, dB), clearings (vertical lines); dashed: Threshold, Floor and Trigger "
+      "when in use. Set them by eye on the input curve." },
+    { kHistLengthBox, "HISTORY LENGTH", "Time shown by the history: 3, 7 or 30 seconds." },
 };
 
 static const int kHoverZoneBase = 100;
+
+// history: one point every 25 ms, the longest length kept; the selector shows the last 3, 7 or 30 s
+static const int kHistorySize = 1201;
+static const int kHistLengthCount = 3;
+static const int kHistSeconds[kHistLengthCount] = { 3, 7, 30 };
+static const char* const kHistLengthNames[kHistLengthCount] = { "3 s", "7 s", "30 s" };
+enum { kSeriesIn = 0, kSeriesWet, kSeriesCut, kSeriesClear, kNumSeries };
+static const float kHistTop = 0.0f, kHistBottom = -80.0f;   // dBFS scale of the history
 
 // position of the dry and wet faders: piecewise linear in dB, off at the bottom
 static const int kLawPoints = 6;
@@ -340,7 +381,13 @@ public:
         fTheme = TinplatePrefs::loadTheme();
 #endif
         fT = &kThemes[fTheme];
-        fLastPaint = std::chrono::steady_clock::now();
+        fLastPaint = fLastPush = std::chrono::steady_clock::now();
+        for (int k = 0; k < kNumSeries; ++k)
+            for (int i = 0; i < kHistorySize; ++i)
+                fHist[k][i] = 0.0f;
+#ifdef TINPLATE_UI_DEMO
+        demoHistory();
+#endif
 #ifdef TINPLATE_UI_DEMO
         // screenshots only (-DTINPLATE_UI_DEMO=<hover id> [-DTINPLATE_UI_DEMO_PRESET=<index>]):
         // a tooltip and meters, since there is no audio
@@ -446,9 +493,41 @@ protected:
             fNameText = TINPLATE_UI_DEMO_NAME;
         }
 #endif
-        // meters: at most 30 repaints per second
+#ifdef TINPLATE_UI_DEMO_OPTIONS
+        if (!fDemoOptionsDone)
+        {
+            fDemoOptionsDone = true;
+            fOptionsOpen = true;
+            setOnce(kParamStereoIn, 1.0f);
+            setOnce(kParamMonoBass, 120.0f);
+        }
+#endif
+#ifdef TINPLATE_UI_DEMO_SYNC
+        if (!fDemoSyncDone)
+        {
+            fDemoSyncDone = true;
+            setOnce(kParamSync, 1.0f);
+            setOnce(kParamNote, 8.0f);
+        }
+#endif
         const auto now = std::chrono::steady_clock::now();
-        if (!fMetersChanged || now - fLastPaint < std::chrono::milliseconds(33))
+#ifndef TINPLATE_UI_DEMO   // screenshots: the synthetic history is kept
+        // history: one point every 25 ms (the DSP gives the peaks of the last ~30 ms)
+        if (now - fLastPush >= std::chrono::milliseconds(25))
+        {
+            fLastPush = now;
+            fHistPos = (fHistPos + 1) % kHistorySize;
+            fHist[kSeriesIn][fHistPos] = fValues[kParamHistIn];
+            fHist[kSeriesWet][fHistPos] = fValues[kParamHistWet];
+            fHist[kSeriesCut][fHistPos] = fValues[kParamHistCut];
+            const float clears = fValues[kParamHistClears];
+            fHist[kSeriesClear][fHistPos] = clears != fLastClears ? 1.0f : 0.0f;
+            fLastClears = clears;
+            fMetersChanged = true;
+        }
+#endif
+        // meters and history: at most 40 repaints per second
+        if (!fMetersChanged || now - fLastPaint < std::chrono::milliseconds(24))
             return;
         fMetersChanged = false;
         fLastPaint = now;
@@ -470,7 +549,10 @@ protected:
         drawOutputSection();
         drawDuckSection();
         drawClearSection();
+        drawHistory();
         drawDecayPlot();
+        if (fOptionsOpen)
+            drawOptionsPanel();
         if (fMenuOpen)
             drawPresetMenu();
         else if (fNaming)
@@ -512,13 +594,21 @@ protected:
             menuClick(x, y, ev.button == kMouseButtonLeft);
             return true;
         }
+        // options panel: a click outside closes it (and goes no further)
+        if (fOptionsOpen && !kOptionsPanel.contains(x, y))
+        {
+            fOptionsOpen = false;
+            fHover = -1;
+            repaint();
+            return true;
+        }
 
         const int k = knobAt(x, y);
 
         if (ev.button == kMouseButtonRight)
         {
-            if (k < 0)
-                return false;
+            if (k < 0 || kKnobs[k].param == kParamNote)
+                return false;   // a note value is chosen with the knob, not typed
             fEdit = k;
             formatNumber(kKnobs[k].param, fEditText, sizeof(fEditText));
             fEditFresh = true;
@@ -529,14 +619,17 @@ protected:
         if (ev.button != kMouseButtonLeft)
             return false;
 
-        if (kPreset.contains(x, y)) { openMenu(); return true; }
-        if (kAB.contains(x, y)) { switchSlot(static_cast<int>(segmentAt(kAB, x, 2))); return true; }
-        if (kCopy.contains(x, y)) { copySlot(); return true; }
-        if (kBypass.contains(x, y)) { toggle(kParamBypass); return true; }
-        if (kTheme.contains(x, y)) { setTheme(static_cast<int>(segmentAt(kTheme, x, TinplatePrefs::kThemeCount))); return true; }
-        if (kFreeze.contains(x, y)) { toggle(kParamFreeze); return true; }
-        if (kClearBtn.contains(x, y)) { toggle(kParamClear); return true; }
-        if (kLink.contains(x, y)) { toggleLink(); return true; }
+        if (fOptionsOpen)
+        {
+            if (k < 0)
+            {
+                if (kStereoBtn.contains(x, y))
+                    toggle(kParamStereoIn);
+                return true;   // inside the panel, nothing more
+            }
+        }
+        else if (clickButton(x, y))
+            return true;
 
         if (k < 0)
             return false;
@@ -555,9 +648,32 @@ protected:
 
         fDrag = k;
         fLastY = y;
+        fDragNorm = toNorm(p, fValues[p]);
         editParameter(target(p), true);
         repaint();
         return true;
+    }
+
+    // buttons and selectors of the window (the options panel closed); true if one was clicked
+    bool clickButton(const float x, const float y)
+    {
+        if (kOptions.contains(x, y)) { fOptionsOpen = true; fHover = -1; repaint(); return true; }
+        if (kSync.contains(x, y)) { toggle(kParamSync); return true; }
+        if (kHistLengthBox.contains(x, y))
+        {
+            fHistLength = static_cast<int>(segmentAt(kHistLengthBox, x, kHistLengthCount));
+            repaint();
+            return true;
+        }
+        if (kPreset.contains(x, y)) { openMenu(); return true; }
+        if (kAB.contains(x, y)) { switchSlot(static_cast<int>(segmentAt(kAB, x, 2))); return true; }
+        if (kCopy.contains(x, y)) { copySlot(); return true; }
+        if (kBypass.contains(x, y)) { toggle(kParamBypass); return true; }
+        if (kTheme.contains(x, y)) { setTheme(static_cast<int>(segmentAt(kTheme, x, TinplatePrefs::kThemeCount))); return true; }
+        if (kFreeze.contains(x, y)) { toggle(kParamFreeze); return true; }
+        if (kClearBtn.contains(x, y)) { toggle(kParamClear); return true; }
+        if (kLink.contains(x, y)) { toggleLink(); return true; }
+        return false;
     }
 
     bool onMotion(const MotionEvent& ev) override
@@ -589,7 +705,9 @@ protected:
             float pixels = (ev.mod & kModifierShift) ? 900.0f : 220.0f;
             if (isFader(p))
                 pixels = 2.0f * kKnobs[fDrag].r * ((ev.mod & kModifierShift) ? 4.0f : 1.0f);   // follows the mouse
-            const float norm = toNorm(p, fValues[p]) + (fLastY - y) / pixels;
+            // an integer parameter (note value) moves by whole steps: the position is accumulated
+            const float norm = (p == kParamNote ? fDragNorm : toNorm(p, fValues[p])) + (fLastY - y) / pixels;
+            fDragNorm = std::fmin(std::fmax(norm, 0.0f), 1.0f);
             fLastY = y;
             changeValue(p, fromNorm(p, norm));
             return true;
@@ -598,7 +716,7 @@ protected:
         int h = knobAt(x, y);
         if (h < 0)
             for (int z = 0; z < kNumZones; ++z)
-                if (kZones[z].r.contains(x, y))
+                if (kZones[z].r.contains(x, y) && zoneActive(z))
                 {
                     h = kHoverZoneBase + z;
                     break;
@@ -637,8 +755,15 @@ protected:
         }
         const int k = knobAt(x, y);
         if (k < 0)
-            return false;
+            return fOptionsOpen;
         const int p = kKnobs[k].param;
+        if (p == kParamNote)
+        {
+            // one note value per notch
+            if (d != 0.0f)
+                setOnce(p, clampValue(p, std::round(fValues[p]) + (d > 0.0f ? 1.0f : -1.0f)));
+            return true;
+        }
         const float step = (ev.mod & kModifierShift) ? 0.005f : 0.025f;
         setOnce(p, fromNorm(p, toNorm(p, fValues[p]) + d * step));
         return true;
@@ -651,6 +776,13 @@ protected:
         if (fMenuOpen && ev.press && ev.key == kKeyEscape)
         {
             closeMenu();
+            return true;
+        }
+        if (fOptionsOpen && fEdit < 0 && ev.press && ev.key == kKeyEscape)
+        {
+            fOptionsOpen = false;
+            fHover = -1;
+            repaint();
             return true;
         }
         if (fNaming)
@@ -738,7 +870,7 @@ private:
     static bool logarithmic(const int p)
     {
         return p == kParamLowCut || p == kParamHighCut || p == kParamModRate || p == kParamAttack || p == kParamRelease || p == kParamFade
-            || p == kParamWindow;
+            || p == kParamWindow || p == kParamMonoBass;
     }
 
     static bool isFader(const int p) { return p == kParamWet || p == kParamDry || p == kParamOutput; }
@@ -781,6 +913,8 @@ private:
             return normToLevel(n);
         if (logarithmic(p))
             return r.min * std::pow(r.max / r.min, n);
+        if (p == kParamNote)
+            return std::round(r.min + n * (r.max - r.min));
         return r.min + n * (r.max - r.min);
     }
 
@@ -797,6 +931,32 @@ private:
     }
 
     bool linked() const { return fValues[kParamLink] > 0.5f; }
+
+    bool synced() const { return fValues[kParamSync] > 0.5f; }
+
+    // pre-delay: the knob in ms, or the note value when locked; mono bass: in the options panel
+    bool knobVisible(const int i) const
+    {
+        if (i == kKnobPredelay)
+            return !synced();
+        if (i == kKnobNote)
+            return synced();
+        if (i == kKnobMonoBass)
+            return fOptionsOpen;
+        return true;
+    }
+
+    // hover zones: those of the options panel while it is open, the others while it is closed
+    bool zoneActive(const int z) const
+    {
+        const bool inPanel = z == kZoneStereo;
+        return fOptionsOpen ? inPanel : !inPanel;
+    }
+
+    bool optionsOn() const
+    {
+        return fValues[kParamStereoIn] > 0.5f || fValues[kParamMonoBass] > kMonoBassOff + 0.05f;
+    }
 
     // linked: the dry and reverb faders are views of the parameter Mix
     bool viewOfMix(const int p) const { return linked() && !fLoading && (p == kParamDry || p == kParamWet); }
@@ -1228,6 +1388,8 @@ private:
     {
         for (int i = 0; i < kNumKnobs; ++i)
         {
+            if (!knobVisible(i) || (fOptionsOpen && i != kKnobMonoBass))
+                continue;
             const float dx = x - kKnobs[i].cx, dy = y - kKnobs[i].cy;
             if (isFader(kKnobs[i].param))
             {
@@ -1254,7 +1416,7 @@ private:
         else if (p == kParamPredelay || p == kParamLowCut || p == kParamHighCut || p == kParamWidth || p == kParamSize || p == kParamModDepth
                  || p == kParamThreshold
                  || p == kParamRelease || p == kParamFloor || p == kParamTrigger || p == kParamFade
-                 || p == kParamWindow)
+                 || p == kParamWindow || p == kParamMonoBass)
             fmt = "%.0f";
         std::snprintf(buf, size, fmt, v);
     }
@@ -1308,6 +1470,16 @@ private:
                 std::snprintf(buf, size, "%+.1f dB", v);
             break;
         case kParamPredelay: std::snprintf(buf, size, "%.0f ms", v); break;
+        case kParamNote:
+            std::snprintf(buf, size, detail ? "%s at the tempo of the host" : "%s  |  sync",
+                          TinplateNote::kNames[TinplateNote::index(v)]);
+            break;
+        case kParamMonoBass:
+            if (v <= kMonoBassOff + 0.05f)
+                std::snprintf(buf, size, "off");
+            else
+                std::snprintf(buf, size, detail ? "%.0f Hz (mono below)" : "%.0f Hz", v);
+            break;
         case kParamHighCut:
             if (v >= kHighCutOff - 0.5f)
                 std::snprintf(buf, size, "off");
@@ -1503,6 +1675,7 @@ private:
         panel(kSecOut);
         panel(kSecDuck);
         panel(kSecClear);
+        panel(kHistory);
         panel(kDecay);
         flowArrow(kSecIn.x + kSecIn.w + 5, kSecIn.y + kSecIn.h * 0.5f);
         flowArrow(kSecTank.x + kSecTank.w + 5, kSecTank.y + kSecTank.h * 0.5f);
@@ -1567,6 +1740,12 @@ private:
         segmented(kAB, ab, 2, fSlot, 11);
         button(kCopy, false, fSlot == 0 ? "A>B" : "B>A", 9);
 
+        // options (lit dot: one of them on)
+        button(kOptions, fOptionsOpen, nullptr);
+        led(kOptions.x + 11, kOptions.y + kOptions.h * 0.5f, optionsOn());
+        label(kOptions.x + kOptions.w * 0.5f + 6, kOptions.y + kOptions.h * 0.5f, 9, fOptionsOpen ? fT->onAccent : fT->dim,
+              ALIGN_CENTER | ALIGN_MIDDLE, "OPTIONS", 1);
+
         // theme
         segmented(kTheme, kThemeNames, TinplatePrefs::kThemeCount, fTheme, 9);
 
@@ -1581,7 +1760,8 @@ private:
     void drawInputSection()
     {
         sectionTitle(kSecIn, "1", "INPUT", "into the plate");
-        drawKnob(kKnobPredelay);
+        drawKnob(synced() ? kKnobNote : kKnobPredelay);
+        button(kSync, synced(), "SYNC", 8.5f);
         divider(kSecIn.x + 12, kSecIn.x + kSecIn.w - 12, 262);
         drawKnob(kKnobBandwidth);
     }
@@ -2117,6 +2297,230 @@ private:
             label(r.x + r.w * 0.5f, r.y + 16, 10, fT->gold, ALIGN_CENTER | ALIGN_MIDDLE, "FROZEN: infinite decay", 1);
     }
 
+    // ---- history
+
+    int historyPoints() const { return kHistSeconds[fHistLength] * 40 + 1; }
+
+    // value j (0: oldest) of a series over the length shown
+    float histAt(const int series, const int j) const
+    {
+        return fHist[series][(fHistPos + 1 + (kHistorySize - historyPoints()) + j) % kHistorySize];
+    }
+
+    // a dashed horizontal line at a level, named at the left (ducking) or right (clear) end of the plot
+    void histLevel(const float y, const Color& c, const char* name, const bool left)
+    {
+        const Rect& r = kHistPlot;
+        beginPath();
+        for (float xx = r.x; xx < r.x + r.w; xx += 8.0f)
+        {
+            moveTo(xx, y + 0.5f);
+            lineTo(xx + 4.0f, y + 0.5f);
+        }
+        strokeWidth(1.0f);
+        strokeColor(c);
+        stroke();
+        if (left)
+            label(r.x + 4, y - 5, 7.5f, c, ALIGN_LEFT | ALIGN_MIDDLE, name, 0.5f);
+        else
+            label(r.x + r.w - 4, y - 5, 7.5f, c, ALIGN_RIGHT | ALIGN_MIDDLE, name, 0.5f);
+    }
+
+    void legendLine(const float x, const float y, const Color& c, const char* name, const int style)
+    {
+        beginPath();
+        if (style == 1)   // shaded box (cut)
+        {
+            rect(x, y - 4, 14, 8);
+            Color shade(c);
+            shade.alpha = 0.3f;
+            fillColor(shade);
+            fill();
+        }
+        else if (style == 2)   // vertical tick (clearing)
+        {
+            moveTo(x + 7, y - 5);
+            lineTo(x + 7, y + 5);
+            strokeWidth(1.6f);
+            strokeColor(c);
+            stroke();
+        }
+        else
+        {
+            moveTo(x, y + 0.5f);
+            lineTo(x + 14, y + 0.5f);
+            lineCap(ROUND);
+            strokeWidth(2.0f);
+            strokeColor(c);
+            stroke();
+        }
+        label(x + 20, y, 9.5f, fT->dim, ALIGN_LEFT | ALIGN_MIDDLE, name, 0.3f);
+    }
+
+    void drawHistory()
+    {
+        const Rect& r = kHistPlot;
+        sectionTitle({ kHistory.x, kHistory.y, 120, 24 }, "6", "HISTORY", "");
+        legendLine(kHistory.x + 12, kHistory.y + 38, fT->hot, "input", 0);
+        legendLine(kHistory.x + 12, kHistory.y + 52, fT->gold, "reverb", 0);
+        legendLine(kHistory.x + 12, kHistory.y + 66, fT->hot, "cut (dB)", 1);
+        legendLine(kHistory.x + 12, kHistory.y + 80, fT->gold, "clearing", 2);
+        segmented(kHistLengthBox, kHistLengthNames, kHistLengthCount, fHistLength, 8);
+
+        beginPath();
+        rect(r.x, r.y, r.w, r.h);
+        fillColor(fT->plot);
+        fill();
+        const auto dbY = [&](const float db) {
+            return r.y + r.h * std::fmin(std::fmax((kHistTop - db) / (kHistTop - kHistBottom), 0.0f), 1.0f);
+        };
+        const auto levelY = [&](const float v) { return dbY(v > 1e-5f ? 20.0f * std::log10(v) : -200.0f); };
+
+        // grid every 20 dB, scale on the right
+        beginPath();
+        for (float db = -20.0f; db > kHistBottom; db -= 20.0f)
+        {
+            moveTo(r.x, dbY(db) + 0.5f);
+            lineTo(r.x + r.w, dbY(db) + 0.5f);
+        }
+        strokeWidth(1.0f);
+        strokeColor(fT->grid);
+        stroke();
+        for (float db = 0.0f; db > kHistBottom; db -= 20.0f)
+        {
+            char b[8];
+            std::snprintf(b, sizeof(b), "%.0f", db);
+            label(r.x + r.w + 5, dbY(db), 8, fT->faint, ALIGN_LEFT | ALIGN_MIDDLE, b);
+        }
+        label(r.x + r.w + 5, r.y + r.h - 3, 7, fT->faint, ALIGN_LEFT | ALIGN_MIDDLE, "dBFS");
+        char b[16];
+        std::snprintf(b, sizeof(b), "-%d s", kHistSeconds[fHistLength]);
+        label(r.x, r.y + r.h + 8, 8, fT->faint, ALIGN_LEFT | ALIGN_MIDDLE, b);
+        label(r.x + r.w, r.y + r.h + 8, 8, fT->faint, ALIGN_RIGHT | ALIGN_MIDDLE, "now");
+
+        const int n = historyPoints();
+        const float dx = r.w / (n - 1);
+        save();
+        scissor(r.x, r.y, r.w, r.h);
+        // cut of the ducking, shaded from the top (0 dB at the top, dB down the same scale)
+        beginPath();
+        moveTo(r.x, r.y);
+        for (int j = 0; j < n; ++j)
+            lineTo(r.x + j * dx, dbY(-histAt(kSeriesCut, j)));
+        lineTo(r.x + r.w, r.y);
+        closePath();
+        Color shade(fT->hot);
+        shade.alpha = 0.22f;
+        fillColor(shade);
+        fill();
+        // clearings
+        beginPath();
+        for (int j = 0; j < n; ++j)
+            if (histAt(kSeriesClear, j) > 0.5f)
+            {
+                moveTo(r.x + j * dx + 0.5f, r.y);
+                lineTo(r.x + j * dx + 0.5f, r.y + r.h);
+            }
+        Color tick(fT->gold);
+        tick.alpha = 0.7f;
+        strokeWidth(1.4f);
+        strokeColor(tick);
+        stroke();
+        // levels in use
+        if (fValues[kParamDuck] >= 0.05f)
+            histLevel(dbY(fValues[kParamThreshold]), Color(fT->hot, fT->plot, 0.35f), "THRESHOLD", true);
+        if (fValues[kParamClear] > 0.5f)
+        {
+            histLevel(dbY(fValues[kParamFloor]), Color(fT->gold, fT->plot, 0.35f), "FLOOR", false);
+            histLevel(dbY(fValues[kParamTrigger]), Color(fT->gold, fT->plot, 0.35f), "TRIGGER", false);
+        }
+        // reverb, then input on top
+        for (const int sr : { kSeriesWet, kSeriesIn })
+        {
+            beginPath();
+            for (int j = 0; j < n; ++j)
+            {
+                const float y = levelY(histAt(sr, j));
+                if (j == 0)
+                    moveTo(r.x, y);
+                else
+                    lineTo(r.x + j * dx, y);
+            }
+            lineJoin(ROUND);
+            lineCap(ROUND);
+            strokeWidth(sr == kSeriesIn ? 1.1f : 1.3f);
+            strokeColor(sr == kSeriesIn ? fT->hot : fT->gold);
+            stroke();
+        }
+        restore();
+    }
+
+#ifdef TINPLATE_UI_DEMO
+    // screenshots: a synthetic history (vocal-like phrases, the reverb ducked, two clearings)
+    void demoHistory()
+    {
+        fHistLength = 1;
+        const int n = kHistorySize;
+        float cut = 0.0f, wet = 0.0f;
+        for (int i = 0; i < n; ++i)
+        {
+            const float t = static_cast<float>(i - (n - 281)) / 40.0f;   // seconds, the 7 s shown from 0
+            const float ph = std::fmod(t + 7.0f, 2.3f);
+            float in = 0.0004f * (1.0f + 0.5f * std::sin(13.0f * t));   // noise floor, about -68 dBFS
+            if (ph < 1.5f)
+                in = std::fmax(in, 0.32f * (0.6f + 0.4f * std::sin(7.0f * t) * std::sin(2.3f * t)) * std::fmin(ph * 12.0f, 1.0f));
+            else
+                in = std::fmax(in, 0.2f * std::exp(-(ph - 1.5f) * 18.0f));
+            const float level = in > 1e-5f ? 20.0f * std::log10(in) : -200.0f;
+            const float target = std::fmin(std::fmax(level + 30.0f, 0.0f), 12.0f);
+            cut = target > cut ? target + 0.08f * (cut - target) : target + 0.92f * (cut - target);
+            wet = std::fmax(in * 0.55f, wet * 0.985f);
+            fHist[kSeriesIn][i] = in;
+            fHist[kSeriesWet][i] = wet * std::pow(10.0f, -cut / 20.0f);
+            fHist[kSeriesCut][i] = cut;
+#ifdef TINPLATE_UI_DEMO_CLEAR
+            fHist[kSeriesClear][i] = ph < 0.026f ? 1.0f : 0.0f;
+#endif
+        }
+        fHistPos = n - 1;
+    }
+#endif
+
+    // options panel, over everything: stereo input and mono bass
+    void drawOptionsPanel()
+    {
+        const Rect& r = kOptionsPanel;
+        beginPath();
+        rect(r.x - 10, r.y - 6, r.w + 20, r.h + 22);
+        roundedRect(r.x, r.y, r.w, r.h, 6);
+        pathWinding(CW);
+        fillPaint(boxGradient(r.x, r.y + 3, r.w, r.h, 8, 12, fT->panelShadow, transparent(fT->panelShadow)));
+        fill();
+        beginPath();
+        roundedRect(r.x, r.y, r.w, r.h, 6);
+        fillColor(fT->tipBg);
+        fill();
+        strokeWidth(1.0f);
+        strokeColor(fT->tipEdge);
+        stroke();
+        label(r.x + 14, r.y + 17, 10, fT->gold, ALIGN_LEFT | ALIGN_MIDDLE, "OPTIONS", 1.5f);
+
+        const bool stereo = fValues[kParamStereoIn] > 0.5f;
+        button(kStereoBtn, stereo, nullptr);
+        led(kStereoBtn.x + 16, kStereoBtn.y + kStereoBtn.h * 0.5f, stereo);
+        label(kStereoBtn.x + kStereoBtn.w * 0.5f + 9, kStereoBtn.y + kStereoBtn.h * 0.5f, 10, stereo ? fT->onAccent : fT->dim,
+              ALIGN_CENTER | ALIGN_MIDDLE, "STEREO INPUT", 1.2f);
+        fontFaceId(fFont);
+        fontSize(9);
+        textLetterSpacing(0);
+        fillColor(fT->dim);
+        textAlign(ALIGN_LEFT | ALIGN_TOP);
+        textBox(kStereoBtn.x, kStereoBtn.y + kStereoBtn.h + 8, kStereoBtn.w + 4,
+                stereo ? "L and R each feed one half of the plate: the reverb follows the panning."
+                       : "The plate takes the mono sum of L and R (the original).", nullptr);
+        drawKnob(kKnobMonoBass);
+    }
+
     // open preset list, drawn over everything: factory presets, a line, saved presets, a line,
     // "Save current settings..."; the current preset is marked with a dot
     void drawPresetMenu()
@@ -2372,7 +2776,20 @@ private:
     bool fEditFresh = false;
     // meters: repainted at most 30 times per second
     bool fMetersChanged = false;
-    std::chrono::steady_clock::time_point fLastPaint;
+    std::chrono::steady_clock::time_point fLastPaint, fLastPush;
+    // options panel; drag of an integer parameter (accumulated position)
+    bool fOptionsOpen = false;
+    float fDragNorm = 0.0f;
+    // history: fHistPos is the newest point; length shown (index into kHistSeconds)
+    float fHist[kNumSeries][kHistorySize];
+    int fHistPos = 0, fHistLength = 0;
+    float fLastClears = 0.0f;
+#ifdef TINPLATE_UI_DEMO_OPTIONS
+    bool fDemoOptionsDone = false;
+#endif
+#ifdef TINPLATE_UI_DEMO_SYNC
+    bool fDemoSyncDone = false;
+#endif
 #ifdef TINPLATE_UI_DEMO_PRESET
     bool fDemoPresetDone = false;
 #endif

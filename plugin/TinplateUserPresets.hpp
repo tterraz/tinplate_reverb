@@ -40,10 +40,11 @@ namespace TinplateUserPresets {
 
 static const size_t kMaxNameLength = 24;
 
-// file keys of the preset parameters kParamBandwidth .. kParamWindow (symbols of the parameters)
+// file keys of the preset parameters kParamBandwidth .. kParamNote (symbols of the parameters)
 static const char* const kUserPresetKeys[kPresetParamCount] = {
     "bandwidth", "tail", "damping", "size", "depth", "rate", "wet", "dry", "link", "mix", "predelay", "lowcut", "highcut", "width", "output",
     "duck", "threshold", "attack", "release", "clear", "floor", "trigger", "fade", "window",
+    "stereo", "monobass", "sync", "note",
 };
 
 static inline bool validName(const std::string& name)

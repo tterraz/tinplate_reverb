@@ -20,6 +20,9 @@
  * write one, same values).  A change of size glides each length linearly to its new integer
  * value, with linear interpolation of the reads while it glides (a brief pitch glide).
  *
+ * Stereo input (option, processStereo): each channel through its own input filters, into one half
+ * of the tank each.
+ *
  * Signal flow (mono input, stereo output):
  *   x -> bandwidth low-pass -> 4 input allpasses (diffusion)
  *     -> two cross-coupled halves, each: modulated allpass -> delay -> damping low-pass
@@ -212,10 +215,12 @@ public:
     // diffusion coefficients, "tuned for soft attack, ambience"
     float indiff1 = .742f, indiff2 = .712f, dediff1 = .723f, dediff2 = .729f;
 
-    struct {
+    struct Input {
         LP1 bandwidth;
         Lattice lattice[4];
-    } input;
+    };
+    Input input;
+    Input input2;   // stereo input: the second channel, same filters (processStereo)
 
     struct {
         ModLattice mlattice[2];
@@ -241,10 +246,13 @@ public:
         const auto L = [&](const int i) { return static_cast<int>(l[i] * fs); };
         const auto room = [&](const int i) { return static_cast<unsigned>(std::ceil(kMaxSize * L(i))) + 2; };
 
-        input.lattice[0].init(L(0));   // lh
-        input.lattice[1].init(L(1));
-        input.lattice[2].init(L(2));   // rh
-        input.lattice[3].init(L(3));
+        for (Input* in : { &input, &input2 })
+        {
+            in->lattice[0].init(L(0));   // lh
+            in->lattice[1].init(L(1));
+            in->lattice[2].init(L(2));   // rh
+            in->lattice[3].init(L(3));
+        }
 
         // modulated, width about 12 samples @ 44.1
         tank.mlattice[0].init(L(4), static_cast<int>(0.000403221 * fs), room(4));
@@ -319,6 +327,7 @@ public:
     void activate()
     {
         input.bandwidth.reset();
+        resetInput2();
         for (int i = 0; i < 4; ++i)
         {
             input.lattice[i].reset();
@@ -344,8 +353,20 @@ public:
         tank.mlattice[1].lfo.retune(2 * M_PI * hz / fFs);
     }
 
+    // the second input channel emptied (stereo input off: it is not computed)
+    void resetInput2()
+    {
+        input2.bandwidth.reset();
+        for (int i = 0; i < 4; ++i)
+            input2.lattice[i].reset();
+    }
+
     // coefficients of the two low-passes (a0)
-    void setBandwidth(const float a0) { input.bandwidth.set(a0); }
+    void setBandwidth(const float a0)
+    {
+        input.bandwidth.set(a0);
+        input2.bandwidth.set(a0);
+    }
     void setDamping(const float a0)
     {
         tank.damping[0].set(a0);
@@ -359,7 +380,28 @@ public:
     }
 
     // one mono sample in, one stereo sample out (PlateStub::process)
-    void process(float x, const float decay, float* const outL, float* const outR)
+    void process(const float x, const float decay, float* const outL, float* const outR)
+    {
+        glideStep();
+        const float d = diffuse(input, x);
+        tankStep(d, d, decay, outL, outR);
+    }
+
+    // stereo input: a and b each through its own input filters (the same as the original's);
+    // a feeds the right half of the tank, whose taps make most of the left output, and b, by
+    // the weight t, the left half (1 - t: a, as the mono input).  t = 0: process(a), to the bit;
+    // t = 1: a = left channel, b = right channel, the reverb follows the panning; a == b: the
+    // output of process(a).
+    void processStereo(const float a, const float b, const float t, const float decay, float* const outL,
+                       float* const outR)
+    {
+        glideStep();
+        const float da = diffuse(input, a), db = diffuse(input2, b);
+        tankStep(da + (db - da) * t, da, decay, outL, outR);
+    }
+
+private:
+    void glideStep()
     {
         if (fGlideLeft > 0)
         {
@@ -371,17 +413,26 @@ public:
                     fLen[i] += fStep[i];
             apply();
         }
+    }
 
-        x = input.bandwidth.process(x);
+    // bandwidth low-pass and the 4 input allpasses (diffusion)
+    float diffuse(Input& in, float x)
+    {
+        x = in.bandwidth.process(x);
 
-        x = input.lattice[0].process(x, indiff1);   // lh
-        x = input.lattice[1].process(x, indiff1);
-        x = input.lattice[2].process(x, indiff2);   // rh
-        x = input.lattice[3].process(x, indiff2);
+        x = in.lattice[0].process(x, indiff1);   // lh
+        x = in.lattice[1].process(x, indiff1);
+        x = in.lattice[2].process(x, indiff2);   // rh
+        x = in.lattice[3].process(x, indiff2);
+        return x;
+    }
 
+    // the tank, its two halves fed with xLeft and xRight (the original: both the same)
+    void tankStep(const float inLeft, const float inRight, const float decay, float* const outL, float* const outR)
+    {
         // summation point
-        double xl = x + decay * tank.delay[3].get();
-        double xr = x + decay * tank.delay[1].get();
+        double xl = inLeft + decay * tank.delay[3].get();
+        double xr = inRight + decay * tank.delay[1].get();
 
         // lh
         xl = tank.mlattice[0].process(xl, dediff1);
@@ -438,7 +489,6 @@ public:
         *outR = static_cast<float>(xr);
     }
 
-private:
     // lengths of the current step into the delays; interpolated reads while they glide
     void apply()
     {

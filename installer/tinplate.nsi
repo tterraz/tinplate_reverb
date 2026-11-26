@@ -7,9 +7,10 @@ Unicode true
 !include "x64.nsh"
 
 !define NAME     "Tinplate Reverb"
-!define VERSION  "1.1.0"
+!define VERSION  "1.2.0"
 !define BUNDLE   "tinplate_reverb"
 !define MANUAL   "Tinplate-Reverb-manuel.pdf"
+!define MANUAL_EN "Tinplate-Reverb-manual.pdf"
 !define UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\TinplateReverb"
 
 Name "${NAME} ${VERSION}"
@@ -59,19 +60,24 @@ Section "CLAP" SecCLAP
     File "../bin/windows/${BUNDLE}.clap"
 SectionEnd
 
-; user manual (French, PDF) next to the licence, with a Start menu shortcut for all users
-Section "Manual (PDF)" SecManual
+; user manuals (English and French, PDF) next to the licence, with Start menu shortcuts for all
+; users
+Section "User manuals (PDF)" SecManual
     SetShellVarContext all
     SetOutPath "$PROGRAMFILES64\Tinplate"
+    File "/oname=${MANUAL_EN}" "../doc/manual.pdf"
     File "/oname=${MANUAL}" "../doc/manuel.pdf"
     CreateDirectory "$SMPROGRAMS\${NAME}"
+    CreateShortcut "$SMPROGRAMS\${NAME}\${NAME} - manual.lnk" "$PROGRAMFILES64\Tinplate\${MANUAL_EN}"
     CreateShortcut "$SMPROGRAMS\${NAME}\${NAME} - manuel.lnk" "$PROGRAMFILES64\Tinplate\${MANUAL}"
 SectionEnd
 
 Section "Uninstall"
     SetShellVarContext all
+    Delete "$SMPROGRAMS\${NAME}\${NAME} - manual.lnk"
     Delete "$SMPROGRAMS\${NAME}\${NAME} - manuel.lnk"
     RMDir "$SMPROGRAMS\${NAME}"
+    Delete "$PROGRAMFILES64\Tinplate\${MANUAL_EN}"
     Delete "$PROGRAMFILES64\Tinplate\${MANUAL}"
     RMDir /r "$COMMONFILES64\VST3\${BUNDLE}.vst3"
     Delete "$COMMONFILES64\CLAP\${BUNDLE}.clap"

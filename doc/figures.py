@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tinplate Reverb - figures of the user manual (doc/manuel.tex).
 
-python3 doc/figures.py  ->  doc/fig_*.pdf
+python3 doc/figures.py  ->  doc/fig_*.pdf (French, manuel.tex) and doc/fig_*_en.pdf (English, manual.tex)
 
 Control laws and filters: the formulas of plugin/TinplateParams.hpp and TinplatePlugin.cpp,
 written again here in NumPy.  Decay times: the table plugin/Rt60Table.hpp, read and interpolated
@@ -25,11 +25,27 @@ plt.rcParams.update({"font.size": 9, "axes.grid": True, "grid.alpha": 0.3, "axes
                      "axes.spines.right": False, "legend.frameon": False, "figure.dpi": 150})
 
 
+LANG = "fr"   # set by main: "fr" or "en"
+
+
+def T(fr, en):
+    """Text of the figures in the language being drawn."""
+    return fr if LANG == "fr" else en
+
+
+def num(x, fmt="%g"):
+    """A number with the decimal separator of the language."""
+    text = fmt % x
+    return text.replace(".", ",") if LANG == "fr" else text
+
+
 def db(x):
     return 20.0 * np.log10(np.maximum(np.abs(x), 1e-12))
 
 
 def save(fig, name):
+    if LANG != "fr":
+        name = name.replace(".pdf", "_%s.pdf" % LANG)
     fig.tight_layout()
     fig.savefig(os.path.join(HERE, name))
     plt.close(fig)
@@ -115,15 +131,15 @@ def rt60(tail, damping, f, fs=44100.0, size=1.0):
 
 # ---------------------------------------------------------------------------------- the plate
 
-def impulse(bandwidth, tail, damping, seconds, sr=44100.0):
+def impulse(bandwidth, tail, damping, seconds, sr=44100.0, left=False):
     exe = os.path.join(ROOT, "build", "impulse")
     src = os.path.join(ROOT, "tools", "impulse.cpp")
     if not os.path.exists(exe) or os.path.getmtime(exe) < os.path.getmtime(src):
         os.makedirs(os.path.dirname(exe), exist_ok=True)
         subprocess.run(["g++", "-O2", "-std=gnu++17", "-I" + os.path.join(ROOT, "plugin"), src, "-o", exe],
                        check=True)
-    raw = subprocess.run([exe, "%g" % sr, "%g" % seconds, "%g" % bandwidth, "%g" % tail, "%g" % damping],
-                         check=True, capture_output=True).stdout
+    args = [exe, "%g" % sr, "%g" % seconds, "%g" % bandwidth, "%g" % tail, "%g" % damping] + (["left"] if left else [])
+    raw = subprocess.run(args, check=True, capture_output=True).stdout
     ir = np.frombuffer(raw, dtype=np.float32).reshape(-1, 2).astype(float)
     return ir[:, 0], ir[:, 1]
 
@@ -134,24 +150,24 @@ def fig_lois():
     p = np.linspace(0.0, 1.0, 401)
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.6, 3.0))
     for fs, ls in ((44100.0, "-"), (96000.0, "--")):
-        k = "%g kHz" % (fs / 1000)
+        k = num(fs / 1000) + " kHz"
         ax1.semilogy(p, one_pole_cutoff(bandwidth_coef(p), fs), ls, color=STEEL, label="Bandwidth, " + k)
         ax1.semilogy(p, one_pole_cutoff(damping_coef(p), fs), ls, color=BRASS, label="Damping, " + k)
-    ax1.set_xlabel("valeur du bouton")
-    ax1.set_ylabel("fréquence à -3 dB (Hz)")
+    ax1.set_xlabel(T("valeur du bouton", "knob value"))
+    ax1.set_ylabel(T("fréquence à -3 dB (Hz)", "-3 dB frequency (Hz)"))
     ax1.set_ylim(5, 50000)
     ax1.legend(fontsize=7, loc="lower center", ncol=2)
-    ax1.set_title("Passe-bas d'entrée et d'amortissement", fontsize=9)
+    ax1.set_title(T("Passe-bas d'entrée et d'amortissement", "Input and damping low-passes"), fontsize=9)
 
     # faders Dry and Reverb: piecewise linear law of the interface (plugin/TinplateUI.cpp)
     law_db, law_pos = [-60, -40, -24, -12, 0, 6], [0, 0.15, 0.35, 0.55, 0.82, 1.0]
     ax2.plot(p, np.interp(p, law_pos, law_db), color=BRASS)
-    ax2.set_xlabel("position du fader (0 en bas, 1 en haut)")
-    ax2.set_ylabel("niveau (dB)")
+    ax2.set_xlabel(T("position du fader (0 en bas, 1 en haut)", "fader position (0 bottom, 1 top)"))
+    ax2.set_ylabel(T("niveau (dB)", "level (dB)"))
     ax2.set_ylim(-62, 8)
     ax2.set_yticks([-60, -40, -24, -12, 0, 6])
     ax2.set_yticklabels(["off", "-40", "-24", "-12", "0", "+6"])
-    ax2.set_title("Faders Dry et Reverb", fontsize=9)
+    ax2.set_title(T("Faders Dry et Reverb", "Dry and Reverb faders"), fontsize=9)
     save(fig, "fig_lois.pdf")
 
 
@@ -160,17 +176,17 @@ def fig_rt60():
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(9.6, 3.0), sharey=True)
     cmap = plt.get_cmap("copper")
     for i, t in enumerate((0.0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.16)):
-        ax1.semilogx(f, rt60(t, 0.4, f), color=cmap(0.15 + 0.7 * i / 6), label="Tail %g" % t)
-    ax1.set_title("Damping 0,4", fontsize=9)
+        ax1.semilogx(f, rt60(t, 0.4, f), color=cmap(0.15 + 0.7 * i / 6), label="Tail " + num(t))
+    ax1.set_title("Damping " + num(0.4), fontsize=9)
     for i, d in enumerate((0.0, 0.25, 0.5, 0.75, 1.0)):
-        ax2.semilogx(f, rt60(0.6, d, f), color=plt.get_cmap("Blues")(0.35 + 0.6 * i / 4), label="Damping %.2f" % d)
-    ax2.set_title("Tail 0,6", fontsize=9)
+        ax2.semilogx(f, rt60(0.6, d, f), color=plt.get_cmap("Blues")(0.35 + 0.6 * i / 4), label="Damping " + num(d, "%.2f"))
+    ax2.set_title("Tail " + num(0.6), fontsize=9)
     for i, z in enumerate((0.5, 1.0, 1.5, 2.0)):
         ax3.semilogx(f, rt60(0.6, 0.4, f, size=z), color=plt.get_cmap("Greens")(0.35 + 0.6 * i / 3),
                      label="Size %d %%" % round(100 * z))
-    ax3.set_title("Tail 0,6, Damping 0,4", fontsize=9)
+    ax3.set_title("Tail %s, Damping %s" % (num(0.6), num(0.4)), fontsize=9)
     for ax in (ax1, ax2, ax3):
-        ax.set_xlabel("fréquence (Hz), à 44,1 kHz")
+        ax.set_xlabel(T("fréquence (Hz), à 44,1 kHz", "frequency (Hz), at 44.1 kHz"))
         ax.set_xticks([62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000])
         ax.set_xticklabels(["62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"])
         ax.legend(fontsize=7, ncol=2)
@@ -183,14 +199,15 @@ def fig_reponse():
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.2, 4.6))
     l, r = impulse(0.8, 0.55, 0.4, 0.25, sr)
     t = np.arange(len(l)) / sr * 1000.0
-    ax1.plot(t, l, color=STEEL, lw=0.6, label="gauche")
-    ax1.plot(t, r - 0.3, color=BRASS, lw=0.6, label="droite (décalée de -0,3)")
+    ax1.plot(t, l, color=STEEL, lw=0.6, label=T("gauche", "left"))
+    ax1.plot(t, r - 0.3, color=BRASS, lw=0.6, label=T("droite (décalée de -0,3)", "right (offset by -0.3)"))
     ax1.set_xlim(0, 250)
     ax1.set_ylim(-0.48, 0.2)
-    ax1.set_xlabel("temps (ms)")
+    ax1.set_xlabel(T("temps (ms)", "time (ms)"))
     ax1.set_ylabel("amplitude")
     ax1.legend(fontsize=7.5, loc="upper right", ncol=2)
-    ax1.set_title("Début de la réponse impulsionnelle (préréglage Default, sans pré-retard)", fontsize=9)
+    ax1.set_title(T("Début de la réponse impulsionnelle (préréglage Default, sans pré-retard)",
+                    "Start of the impulse response (Default preset, no pre-delay)"), fontsize=9)
 
     for tail, col in ((0.25, STEEL), (0.55, BRASS), (0.85, RUST)):
         l, r = impulse(0.8, tail, 0.4, 8.0, sr)
@@ -198,14 +215,15 @@ def fig_reponse():
         edc = np.cumsum(e[::-1])[::-1]
         edc = 10.0 * np.log10(edc / edc[0] + 1e-30)
         tt = np.arange(len(e)) / sr
-        ax2.plot(tt, edc, color=col, label="Tail %.2f (RT60 à 500 Hz : %.1f s)" % (tail, rt60(tail, 0.4, 500.0)))
+        ax2.plot(tt, edc, color=col, label=T("Tail %s (RT60 à 500 Hz : %s s)", "Tail %s (RT60 at 500 Hz: %s s)")
+                 % (num(tail, "%.2f"), num(rt60(tail, 0.4, 500.0), "%.1f")))
     ax2.set_xlim(0, 6)
     ax2.set_ylim(-70, 2)
-    ax2.set_xlabel("temps (s)")
-    ax2.set_ylabel("énergie restante (dB)")
+    ax2.set_xlabel(T("temps (s)", "time (s)"))
+    ax2.set_ylabel(T("énergie restante (dB)", "remaining energy (dB)"))
     ax2.legend(fontsize=7.5)
-    ax2.set_title("Décroissance de l'énergie (intégrale de Schroeder, L + R ; Bandwidth 0,8, Damping 0,4)",
-                  fontsize=9)
+    ax2.set_title(T("Décroissance de l'énergie (intégrale de Schroeder, L + R ; Bandwidth 0,8, Damping 0,4)",
+                    "Energy decay (Schroeder integral, L + R; Bandwidth 0.8, Damping 0.4)"), fontsize=9)
     save(fig, "fig_reponse.pdf")
 
 
@@ -232,15 +250,16 @@ def fig_duck():
     x = np.where(on, 0.5 * np.sin(2.0 * np.pi * 220.0 * t), 0.0)
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.0, 3.8), sharex=True, gridspec_kw={"height_ratios": [1, 1.6]})
     ax1.plot(t, x, color=GREY, lw=0.4)
-    ax1.set_ylabel("entrée")
+    ax1.set_ylabel(T("entrée", "input"))
     ax1.set_ylim(-0.6, 0.6)
     for rel, col in ((100.0, STEEL), (400.0, BRASS), (1500.0, RUST)):
         ax2.plot(t, -duck_cut(x, fs, -30.0, 12.0, 10.0, rel), color=col, label="Release %g ms" % rel)
-    ax2.set_ylabel("gain de la réverbération (dB)")
-    ax2.set_xlabel("temps (s)")
+    ax2.set_ylabel(T("gain de la réverbération (dB)", "gain of the reverb (dB)"))
+    ax2.set_xlabel(T("temps (s)", "time (s)"))
     ax2.set_ylim(-13, 1)
     ax2.legend(fontsize=7.5, loc="lower right")
-    ax2.set_title("Duck 12 dB, Threshold -30 dBFS, Attack 10 ms ; entrée à -6 dBFS", fontsize=9)
+    ax2.set_title(T("Duck 12 dB, Threshold -30 dBFS, Attack 10 ms ; entrée à -6 dBFS",
+                    "Duck 12 dB, Threshold -30 dBFS, Attack 10 ms; input at -6 dBFS"), fontsize=9)
     save(fig, "fig_duck.pdf")
 
 
@@ -260,22 +279,49 @@ def fig_ton():
     f = np.geomspace(20.0, 20000.0, 400)
     fig, ax = plt.subplots(figsize=(6.0, 3.0))
     for p, ls in ((1.0, "-"), (0.8, "--"), (0.5, ":")):
-        ax.semilogx(f, db(one_pole_gain(bandwidth_coef(p), f, fs)), ls, color=STEEL, label="Bandwidth %.1f" % p)
+        ax.semilogx(f, db(one_pole_gain(bandwidth_coef(p), f, fs)), ls, color=STEEL, label="Bandwidth " + num(p, "%.1f"))
     for hz, ls in ((60.0, "-"), (150.0, "--"), (500.0, ":")):
         ax.semilogx(f, db(low_cut_gain(hz, f, fs)), ls, color=BRASS, label="Low cut %g Hz" % hz)
     for hz, ls in ((8000.0, "-"), (3000.0, "--")):
-        ax.semilogx(f, db(high_cut_gain(hz, f, fs)), ls, color=RUST, label="High cut %g kHz" % (hz / 1000))
+        ax.semilogx(f, db(high_cut_gain(hz, f, fs)), ls, color=RUST, label="High cut %s kHz" % num(hz / 1000))
     ax.set_ylim(-30, 2)
     ax.set_xlim(20, 20000)
-    ax.set_xlabel("fréquence (Hz), à 44,1 kHz")
+    ax.set_xlabel(T("fréquence (Hz), à 44,1 kHz", "frequency (Hz), at 44.1 kHz"))
     ax.set_ylabel("gain (dB)")
     ax.legend(fontsize=7.5, ncol=2, loc="lower center")
     save(fig, "fig_ton.pdf")
 
 
+def fig_stereo():
+    """Left-right balance of the reverb of an impulse on the left: mono input, stereo input."""
+    sr = 44100.0
+    win = int(0.02 * sr)
+    fig, ax = plt.subplots(figsize=(6.4, 2.8))
+    for left, col, name in ((False, GREY, T("entrée mono (l'original)", "mono input (the original)")),
+                            (True, STEEL, T("entrée stéréo", "stereo input"))):
+        l, r = impulse(0.8, 0.55, 0.4, 1.5, sr, left)
+        n = len(l) // win
+        el = (l[:n * win] ** 2).reshape(n, win).sum(axis=1)
+        er = (r[:n * win] ** 2).reshape(n, win).sum(axis=1)
+        t = (np.arange(n) + 0.5) * win / sr
+        bal = 10.0 * np.log10((el + 1e-30) / (er + 1e-30))
+        ax.plot(t, np.clip(bal, -15, 15), color=col, marker="o", ms=2.5, lw=1.2, label=name)
+    ax.axhline(0.0, color=DARK, lw=0.6)
+    ax.set_xlim(0, 1.5)
+    ax.set_ylim(-6, 15.5)
+    ax.set_xlabel(T("temps (s)", "time (s)"))
+    ax.set_ylabel(T("gauche - droite (dB)", "left - right (dB)"))
+    ax.set_title(T("Impulsion à gauche : équilibre de la réverbération par tranches de 20 ms",
+                   "Impulse on the left: balance of the reverb in slices of 20 ms"), fontsize=9)
+    ax.legend(fontsize=7.5, loc="upper right")
+    save(fig, "fig_stereo.pdf")
+
+
 if __name__ == "__main__":
-    fig_lois()
-    fig_rt60()
-    fig_reponse()
-    fig_ton()
-    fig_duck()
+    for LANG in ("fr", "en"):
+        fig_lois()
+        fig_rt60()
+        fig_reponse()
+        fig_ton()
+        fig_duck()
+        fig_stereo()
