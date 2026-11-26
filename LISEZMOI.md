@@ -68,8 +68,8 @@ Différences voulues avec l'original :
 | Freeze | réverbération tenue sans fin : entrée de la plaque fermée, decay à 1, damping supprimé (20 ms), profondeur de modulation à 0 (200 ms) ; le signal sec passe toujours |
 | Dry, Reverb | (1.1.0, à la place de Blend) faders des niveaux du sec et de la réverbération seule, off (-60) à +6 dB ; loi de position par morceaux (off, -40, -24, -12, 0, +6 dB à 0, 0,15, 0,35, 0,55, 0,82, 1) |
 | Width | largeur stéréo de la réverbération (0 % mono, 200 % côté doublé) |
-| Stereo input | (1.2.0, point D, menu OPTIONS) off : somme mono (l'original) ; on : `PlateCore::processStereo`, second jeu de filtres d'entrée (`input2`), L dans la moitié droite du réservoir (ses prises font l'essentiel de la sortie gauche ; vérifié par mesure, l'inverse donne une sortie à droite), R dans la gauche ; rampe de 20 ms `fStereo` (t : moitié gauche = da + t (db - da), da = diffusion de x + t (L - x)) ; t = 0 en fin de rampe : `input2` vidé et plus calculé ; L = R : sortie identique au mono (au bit) ; effet : 60 ms d'un seul côté puis +2 à +4 dB jusqu'à 0,5 s, la queue revient au centre (structure) ; test 16 |
-| Mono bass | (1.2.0, point E, menu OPTIONS) 20 (off) à 500 Hz, logarithmique : passe-haut RBJ 2e ordre (`Cut2::process1`) sur le côté s = (wL - wR)/2 seul, avant Width ; off : contourné (identité au bit) ; test 17 (200 Hz : côté -24 dB à 50 Hz, 0 dB à 2 kHz, milieu intact) |
+| Stereo input | (1.2.0, point D, petit bouton STEREO de la section INPUT) off : somme mono (l'original) ; on : `PlateCore::processStereo`, second jeu de filtres d'entrée (`input2`), L dans la moitié droite du réservoir (ses prises font l'essentiel de la sortie gauche ; vérifié par mesure, l'inverse donne une sortie à droite), R dans la gauche ; rampe de 20 ms `fStereo` (t : moitié gauche = da + t (db - da), da = diffusion de x + t (L - x)) ; t = 0 en fin de rampe : `input2` vidé et plus calculé ; L = R : sortie identique au mono (au bit) ; effet : 60 ms d'un seul côté puis +2 à +4 dB jusqu'à 0,5 s, la queue revient au centre (structure) ; test 16 |
+| Mono bass | (1.2.0, point E, grille de la section OUTPUT) 20 (off) à 500 Hz, logarithmique : passe-haut RBJ 2e ordre (`Cut2::process1`) sur le côté s = (wL - wR)/2 seul, avant Width ; off : contourné (identité au bit) ; test 17 (200 Hz : côté -24 dB à 50 Hz, 0 dB à 2 kHz, milieu intact) |
 | Low cut | passe-haut à 12 dB/octave sur la réverbération seule, 20 Hz (off) à 1 kHz, bouton logarithmique |
 | High cut | (point A d'`AMELIORATIONS.md`) passe-bas à 12 dB/octave sur la réverbération seule, après Low cut, 1 kHz à 20 kHz (off), logarithmique ; même structure que Low cut (`Cut2`, RBJ en double, contourné à off) ; test 4 (8 kHz : -38 dB pour 1 kHz) |
 | Output | gain de toute la sortie, -24..+12 dB (fader depuis 1.1.0) |
@@ -140,19 +140,23 @@ Préréglages de l'utilisateur : comme Brimstone (voir « Interface »).
 
 ## Interface
 900 × 858 (730 en 1.1.0, 600 en 1.0.0), redimensionnable (proportions gardées), HiDPI. Trois sections numérotées dans l'ordre
-du signal : **1 INPUT** (Pre-delay ou NOTE selon le bouton SYNC, Bandwidth), **2 PLATE** (Tail, Damping, Freeze, RT60 à
-500 Hz, 125 Hz et 4 kHz ; Tail et Damping grisés pendant le gel), **3 OUTPUT** (Width, Low cut, High cut ;
-faders DRY, REVERB, OUTPUT ; vu-mètres IN, REVERB, OUT). Dessous, la bande **4 DUCKING** (Duck, Threshold,
-Attack, Release, grisés sauf Duck quand Duck = 0 ; vu-mètre CUT 0-30 dB) et **5 CLEAR** (bouton,
-état waiting/ARMED/CLEARED, Floor, Trigger, Fade, Window grisés si éteint). Puis **6 HISTORY**
+du signal : **1 INPUT** (Pre-delay ou NOTE selon le petit bouton SYNC, Bandwidth et le petit bouton
+STEREO de l'entrée stéréo), **2 PLATE** (cinq boutons de même taille, rayon 32, en grille : Tail,
+Damping, Size ; Depth, Rate ; RT60 à 500 Hz, 125 Hz et 4 kHz ; Tail, Damping, Depth, Rate grisés
+pendant le gel), **3 OUTPUT** (grille 2 × 2 : Width, Mono bass ; Low cut, High cut ; faders DRY,
+REVERB, OUTPUT ; vu-mètres IN, REVERB, OUT ; PLATE 330 de large, OUTPUT 290). Dessous, les bandes
+symétriques (cadres de 425, même rayon 22 et même espacement des boutons) **4 DUCKING** (Duck,
+Threshold, Attack, Release, grisés sauf Duck quand Duck = 0 ; vu-mètre CUT 0-30 dB) et **5 CLEAR**
+(petit bouton CLEAR en haut à droite, à la place du vu-mètre CUT, état waiting/ARMED/CLEARED à sa
+droite, Floor, Trigger, Fade, Window grisés si éteint). Puis **6 HISTORY**
 (1.2.0, point I) : crêtes d'entrée (acier) et de la réverbération après ducking (laiton) sur une
 échelle fixe 0 à -80 dBFS, baisse du ducking ombrée depuis le haut, vidages en traits verticaux,
 lignes THRESHOLD (à gauche, si Duck > 0), FLOOR et TRIGGER (à droite, si Clear) ; un point toutes
 les 25 ms (`uiIdle`, crêtes des ~30 dernières ms données par le DSP, `RecentPeak` de Brimstone ;
 vidage = compteur `hist_clears` changé), 30 s gardées, 3/7/30 s affichées (non enregistré avec
-le projet). En-tête : bouton **OPTIONS** (point allumé si une option est active) ouvrant un
-panneau (Stereo input, bouton Mono bass ; clic dehors ou Échap ferme ; tant qu'il est ouvert,
-seuls ses éléments réagissent). En bas : **temps de
+le projet). En-tête : préréglages, A | B, copie, thème SLATE | TIN, **FREEZE** (voyant),
+ACTIVE/BYPASSED (le menu OPTIONS essayé pendant la session 73 a été retiré : chaque réglage est
+dans la section de son étape du signal). En bas : **temps de
 réverbération en fonction de la fréquence** (laiton, secondes, échelle de 2 à 12 s selon la courbe) et **tonalité de la
 réverbération** (acier, tirets, dB : Bandwidth et Low cut).
 
@@ -213,7 +217,7 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   de l'utilisateur 17 ; `build.sh` complet ; validateur VST3 47/47 Linux et Windows (sous Wine) ;
   installateur 1.2.0 sous Wine (`/S`, préfixe neuf) : VST3 identique à `bin/windows/`, CLAP, deux
   manuels identiques à `doc/`, deux raccourcis, puis tout retiré ; captures refaites (affichage du
-  panneau OPTIONS, de SYNC et de l'historique vu ; clics dans l'hôte non essayés).
+  de SYNC, STEREO, FREEZE, Mono bass et de l'historique vu ; clics dans l'hôte non essayés).
 - `tests/test_prefs.cpp` (7) et `tests/test_user_presets.cpp` (17, sous locale `fr_FR.UTF-8`).
 - Validateur VST3 de Steinberg : 47/47 sur le VST3 Linux et sur le VST3 Windows (sous Wine) ;
   1.1.0 : 47/47 sur les deux (script corrigé pour MinGW comme Noise Padifier :
@@ -246,7 +250,7 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   OUT.png` (Wine, préfixe `build/wineprefix`, attend la fenêtre 900 × 858). Zones : -1 aucune,
   knobs (ordre de `kKnobs`), bulles 100 + indice de `kZones`. Historique : synthétique en mode
   démo (`demoHistory`, vidages seulement avec `_CLEAR`). Captures 1.2.0 : Slate = préréglage 8
-  (Ducked vocal) ; Tin = préréglage 8, `_CLEAR`, `_OPTIONS`, `_SYNC`.
+  (Ducked vocal) ; Tin = préréglage 8, `_CLEAR`, `_OPTIONS` (entrée stéréo, Mono bass 120 Hz), `_SYNC`, `_FREEZE`.
 - **Release GitHub** (procédure ; `V` = numéro) : `./build.sh` complet sur `master` propre ;
   fichiers assemblés dans `build/release/` (non suivi) : installateur
   `bin/Tinplate-Reverb-V-setup.exe`, `Tinplate-Reverb-V-windows.zip` (VST3, CLAP),
@@ -267,11 +271,10 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   (demande de l'utilisateur, aucun utilisateur de 1.0.0) : `v1.1.0` est la seule release.
 - **Après `v1.1.0` (session 72, non publié)** : C Size, A High cut, K banc CPU, B Depth/Rate,
   H Mix lié.
-- **1.2.0 (session 73, 2026-11-26, non publiée, non commitée à la rédaction)** : D entrée stéréo
-  et E Mono bass (menu OPTIONS), G pré-retard au tempo (SYNC), I historique (section 6, fenêtre
+- **1.2.0 (session 73, 2026-11-26, non publiée ; commit `dcdd383`)** : D entrée stéréo
+  et E Mono bass (bouton STEREO dans INPUT, Mono bass dans OUTPUT ; FREEZE passé dans l'en-tête), G pré-retard au tempo (SYNC), I historique (section 6, fenêtre
   900 × 858), J trois préréglages, L manuel anglais (installateur : deux manuels), K cas
   « options ». Version 1.2.0 dans `getVersion`, l'installateur, `README.md`, les manuels.
-  Reste : M (validateur CLAP : `clap-validator` absent, binaire à télécharger, non fait),
-  ergonomie à revoir avec l'utilisateur, écoute, vrai hôte, release.
+  Validateur CLAP abandonné (décision de l'utilisateur). Reste : ergonomie à revoir avec l'utilisateur, écoute, vrai hôte, release.
 - Pistes non faites : réglages des préréglages à l'oreille ;
   autres pistes dans `AMELIORATIONS.md`.

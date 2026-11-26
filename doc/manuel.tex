@@ -109,8 +109,8 @@ les préréglages de l'utilisateur (section~\ref{sec:fichiers}).
 \item Pour que chaque nouveau coup (accord, frappe) parte dans une réverbération propre,
   allumer \ctl{CLEAR} (section 5). L'historique (section 6) montre l'entrée et les seuils pour
   régler ces deux sections à l'œil.
-\item Une source stéréo (piano, guitare enregistrée en stéréo) : \ctl{OPTIONS}, \ctl{STEREO
-  INPUT} ; un grave plus ferme : \ctl{MONO BASS}.
+\item Une source stéréo (piano, guitare enregistrée en stéréo) : \ctl{STEREO} (section 1) ;
+  un grave plus ferme : \ctl{MONO BASS} (section 3).
 \end{enumerate}
 
 % ==============================================================================================
@@ -118,14 +118,14 @@ les préréglages de l'utilisateur (section~\ref{sec:fichiers}).
 
 La fenêtre (900 × 858 points, redimensionnable en gardant ses proportions, nette sur les écrans à
 haute densité) se lit de gauche à droite dans l'ordre du signal : trois sections numérotées
-reliées par des flèches, puis les sections \ctl{DUCKING} (4) et \ctl{CLEAR} (5), l'historique
+reliées par des flèches, puis les sections symétriques \ctl{DUCKING} (4) et \ctl{CLEAR} (5),
+l'historique
 \ctl{HISTORY} (6) et le graphique du temps de réverbération en bas. Chaque élément a une
 bulle d'aide au survol ; pour un bouton, son titre donne la valeur détaillée.
 
 \begin{center}
 \includegraphics[width=0.8\textwidth]{capture_interface_tin.png}\\[2pt]
-\small Thème clair \ctl{TIN}, Clear allumé, Pre-delay calé sur le tempo, panneau \ctl{OPTIONS}
-ouvert.
+\small Thème clair \ctl{TIN} ; Freeze, Sync, entrée stéréo, Mono bass et Clear allumés.
 \end{center}
 
 \subsection{En-tête}
@@ -139,31 +139,32 @@ ouvert.
   (le jeu quitté est gardé, l'autre est rechargé ; à la première visite, B part d'une copie de
   A). \ctl{A>B} (ou \ctl{B>A}) copie le jeu courant dans l'autre. Les deux jeux sont
   enregistrés avec le projet.
-\item[OPTIONS.] Ouvre un petit panneau : \ctl{STEREO INPUT} (bouton) et \ctl{MONO BASS}
-  (bouton rotatif), décrits en section~\ref{sec:reglages}. Le point du bouton s'allume quand
-  l'une des deux options est active. Un clic hors du panneau, ou \textsf{Échap}, le ferme.
 \item[SLATE | TIN.] Thème sombre ou clair (gris légèrement vert), sans effet sur le son ; c'est une préférence de
   l'ordinateur, commune à toutes les instances et à tous les projets.
+\item[FREEZE.] Gèle la réverbération (voyant allumé) ; Tail, Damping, Depth et Rate sont alors
+  grisés, puisqu'ils n'agissent plus (section~\ref{sec:freeze}).
 \item[ACTIVE / BYPASSED.] Le Bypass déclaré à l'hôte (section~\ref{sec:lissage}).
 \end{description}
 
 \subsection{Section 1 : INPUT}
 \ctl{PRE-DELAY} et \ctl{BANDWIDTH} : ce qui entre dans la plaque. Le petit bouton \ctl{SYNC}
 cale le pré-retard sur le tempo de l'hôte : le bouton Pre-delay choisit alors une valeur de note
-(1/64 à 1/4, pointée \og D\fg{} ou en triolet \og T\fg). Sous Bandwidth, sa valeur et
+(1/64 à 1/4, pointée \og D\fg{} ou en triolet \og T\fg). Le petit bouton \ctl{STEREO}, près
+de Bandwidth, fait entrer chaque canal dans sa moitié de la plaque (entrée stéréo). Sous
+Bandwidth, sa valeur et
 la fréquence à $-3$\dB{} du filtre à la fréquence d'échantillonnage courante (\og open\fg{}
 quand il reste au-dessus de $-3$\dB{} jusqu'à la fréquence de Nyquist).
 
 \subsection{Section 2 : PLATE}
-\ctl{TAIL} et \ctl{DAMPING}, les deux grands boutons de la boucle ; sous Damping, la fréquence à
-$-3$\dB{} de son filtre. À droite de \ctl{FREEZE}, trois petits boutons : \ctl{SIZE} (taille
-de la plaque), \ctl{DEPTH} et \ctl{RATE} (profondeur et vitesse de la modulation, grisés
-pendant le gel, qui l'arrête). Au centre, le temps de réverbération (RT60) à 500\,Hz, en grand, et à
-125\,Hz et 4\,kHz. Le bouton \ctl{FREEZE} gèle la réverbération ; Tail et Damping sont alors
-grisés, puisqu'ils n'agissent plus.
+Cinq boutons de même taille sur deux rangées : \ctl{TAIL}, \ctl{DAMPING} (sous lui, la
+fréquence à $-3$\dB{} de son filtre) et \ctl{SIZE} (taille de la plaque) ; puis \ctl{DEPTH} et
+\ctl{RATE} (profondeur et vitesse de la modulation, grisés pendant le gel, qui l'arrête).
+Dessous, le temps de réverbération (RT60) à 500\,Hz, en grand, et à 125\,Hz et 4\,kHz
+(\og infinite\fg{} pendant le gel).
 
 \subsection{Section 3 : OUTPUT}
-\ctl{WIDTH}, \ctl{LOW CUT} et \ctl{HIGH CUT}, puis trois faders : \ctl{DRY} (niveau du son direct),
+Quatre petits boutons en carré : \ctl{WIDTH} et \ctl{MONO BASS} (largeur), \ctl{LOW CUT} et
+\ctl{HIGH CUT} (tonalité) ; puis trois faders : \ctl{DRY} (niveau du son direct),
 \ctl{REVERB} (niveau de la réverbération seule) et \ctl{OUTPUT} (gain de la sortie). Les deux
 premiers vont de \og off\fg{} (en bas) à $+6$\dB, avec l'échelle à leur gauche (0\dB{} aux
 quatre cinquièmes de la course) ; Output va de $-24$ à $+12$\dB. La petite chaîne au-dessus de
@@ -171,7 +172,7 @@ Dry et Reverb les lie (chaîne entière, dorée) ou les délie (chaîne brisée)
 (section~\ref{sec:reglages}). Un fader suit la souris
 (\textsf{Maj} : quatre fois plus fin) et se manie pour le reste comme un bouton. Puis trois
 vu-mètres de crête : \ctl{IN} (entrée), \ctl{REVERB} (réverbération seule, après Low cut, High cut,
-Width et ducking, avant son fader), \ctl{OUT} (sortie), en dBFS ; après une crête, l'affichage redescend avec une constante de temps de 0,25\,s.
+Mono bass, Width et ducking, avant son fader), \ctl{OUT} (sortie), en dBFS ; après une crête, l'affichage redescend avec une constante de temps de 0,25\,s.
 
 \subsection{Section 4 : DUCKING}
 \ctl{DUCK} (profondeur), \ctl{THRESHOLD}, \ctl{ATTACK}, \ctl{RELEASE} ; les trois derniers
@@ -179,8 +180,9 @@ sont grisés tant que Duck est à 0 (\og off\fg), puisqu'ils n'agissent pas. En 
 vu-mètre \ctl{CUT} montre de combien la réverbération est baissée en ce moment (0 à 30\dB).
 
 \subsection{Section 5 : CLEAR}
-Le bouton \ctl{CLEAR} (éteint par défaut) et \ctl{FLOOR}, \ctl{TRIGGER}, \ctl{FADE}, \ctl{WINDOW}, grisés
-tant qu'il est éteint. Sous le bouton, l'état de la détection : \og waiting\fg{} (l'entrée
+Le petit bouton \ctl{CLEAR} en haut à droite (éteint par défaut ; à la place du vu-mètre
+\ctl{CUT} de la section 4) et \ctl{FLOOR}, \ctl{TRIGGER}, \ctl{FADE}, \ctl{WINDOW}, grisés
+tant qu'il est éteint. À droite du bouton, l'état de la détection : \og waiting\fg{} (l'entrée
 n'est pas encore passée sous Floor, ou l'ancienne réverbération finit son fondu),
 \og ARMED\fg{} (la prochaine attaque videra la plaque), \og CLEARED\fg{} (allumé 0,2\,s à
 chaque vidage).

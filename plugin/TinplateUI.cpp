@@ -14,7 +14,7 @@
  * clearings, with the thresholds, over the last 3, 7 or 30 s),
  * and at the bottom the decay time (RT60) of the plate against frequency with the tone of the wet
  * signal (bandwidth, low and high cut).
- * OPTIONS (header): a small panel with the stereo input and the mono bass.
+ * FREEZE in the header; STEREO (input) by Bandwidth; MONO BASS with the width in OUTPUT.
  * Knobs: drag vertically (Shift = fine), mouse wheel, double-click or Ctrl+click = default,
  * right-click = type a value (Enter / Escape).  Every control has a tooltip.
  * A / B: two sets of settings to compare (header: A | B, copy to the other); the inactive one is
@@ -139,10 +139,10 @@ struct Rect {
 
 // sections
 static const Rect kSecIn   = { 20, 70, 220, 380 };
-static const Rect kSecTank = { 250, 70, 370, 380 };
-static const Rect kSecOut  = { 630, 70, 250, 380 };
+static const Rect kSecTank = { 250, 70, 330, 380 };
+static const Rect kSecOut  = { 590, 70, 290, 380 };
 static const Rect kSecDuck = { 20, 460, 425, 122 };
-static const Rect kSecClear = { 455, 460, 425, 122 };
+static const Rect kSecClear = { 455, 460, 425, 122 };   // mirror of 4 DUCKING
 static const Rect kHistory = { 20, 592, 860, 118 };
 static const Rect kHistPlot = { 150, 602, 680, 90 };   // history: dBFS against time
 static const Rect kHistLengthBox = { 30, 688, 92, 14 }; // history length, under the legend
@@ -169,63 +169,63 @@ static constexpr KnobDef kKnobs[kNumKnobs] = {
     { kParamBandwidth, 130.0f, 324.0f, 44.0f, "BANDWIDTH",
       "Low-pass at the input of the plate (control of the original). Low: darker, softer onset. "
       "Shown: its -3 dB frequency at this sample rate." },
-    { kParamTail,      360.0f, 165.0f, 50.0f, "TAIL",
+    { kParamTail,      305.0f, 145.0f, 32.0f, "TAIL",
       "Length of the reverb: gain of the loop of the plate (control of the original, 0 to 1; "
       "same law up to 1.16: 10 s at 500 Hz). Shown: the decay time at 500 Hz, measured on the plate." },
-    { kParamDamping,   510.0f, 165.0f, 50.0f, "DAMPING",
+    { kParamDamping,   415.0f, 145.0f, 32.0f, "DAMPING",
       "Low-pass inside the loop (control of the original): the highs die sooner than the lows. "
       "Shown: its -3 dB frequency at this sample rate." },
-    { kParamWet,       797.0f, 215.0f, 95.0f, "REVERB",
+    { kParamWet,       810.0f, 215.0f, 95.0f, "REVERB",
       "Level of the reverb alone, dB (at the bottom: off). Reverb at 0 dB and Dry off: reverb only "
       "(for a send)." },
-    { kParamWidth,     675.0f, 128.0f, 18.0f, "WIDTH",
+    { kParamWidth,     624.0f, 135.0f, 18.0f, "WIDTH",
       "Stereo width of the reverb: 0 % mono, 100 % as the plate gives it, 200 % side doubled." },
-    { kParamLowCut,    675.0f, 213.0f, 18.0f, "LOW CUT",
+    { kParamLowCut,    624.0f, 245.0f, 18.0f, "LOW CUT",
       "High-pass on the reverb only (12 dB / octave): keeps the low end of the mix clear. "
       "At the minimum: off." },
-    { kParamOutput,    849.0f, 215.0f, 95.0f, "OUTPUT",
+    { kParamOutput,    856.0f, 215.0f, 95.0f, "OUTPUT",
       "Gain of the whole output, dry and wet." },
-    { kParamDuck,       85.0f, 520.0f, 22.0f, "DUCK",
+    { kParamDuck,       73.0f, 520.0f, 22.0f, "DUCK",
       "Ducking: the reverb is lowered while the input plays and comes back in the gaps "
       "(clearer vocals). Largest cut of the reverb, dB. At 0: off." },
-    { kParamThreshold, 185.0f, 520.0f, 22.0f, "THRESHOLD",
+    { kParamThreshold, 179.0f, 520.0f, 22.0f, "THRESHOLD",
       "Input peak level where the ducking starts: the reverb is cut by as many dB as the input "
       "goes over it, at most the Duck depth." },
-    { kParamAttack,    285.0f, 520.0f, 22.0f, "ATTACK",
+    { kParamAttack,    286.0f, 520.0f, 22.0f, "ATTACK",
       "How fast the reverb goes down when the input comes in." },
-    { kParamRelease,   385.0f, 520.0f, 22.0f, "RELEASE",
+    { kParamRelease,   392.0f, 520.0f, 22.0f, "RELEASE",
       "How fast the reverb comes back when the input stops: short, it swells in every gap; "
       "long, it comes back at the end of the phrase." },
-    { kParamFloor,     600.0f, 520.0f, 20.0f, "FLOOR",
+    { kParamFloor,     508.0f, 520.0f, 22.0f, "FLOOR",
       "Clear: the detection is armed while the input stays under this peak level (and the "
       "previous clearing has ended)." },
-    { kParamTrigger,   680.0f, 520.0f, 20.0f, "TRIGGER",
+    { kParamTrigger,   614.0f, 520.0f, 22.0f, "TRIGGER",
       "Clear: an armed input that goes over this level within the Window is a new attack, and "
       "empties the plate." },
-    { kParamFade,      760.0f, 520.0f, 20.0f, "FADE",
+    { kParamFade,      721.0f, 520.0f, 22.0f, "FADE",
       "Clear: how fast the old reverb fades out at a new attack (the new sound goes into an "
       "empty plate at once)." },
-    { kParamWindow,    838.0f, 520.0f, 20.0f, "WINDOW",
+    { kParamWindow,    827.0f, 520.0f, 22.0f, "WINDOW",
       "Clear: longest time for the input to go from Floor to Trigger to count as an attack. "
       "Short: only sharp attacks (drums, plucks); long: softer ones too." },
-    { kParamDry,       745.0f, 215.0f, 95.0f, "DRY",
+    { kParamDry,       762.0f, 215.0f, 95.0f, "DRY",
       "Level of the dry signal, dB (at the bottom: off). Not delayed: no latency." },
-    { kParamSize,      435.0f, 318.0f, 16.0f, "SIZE",
+    { kParamSize,      525.0f, 145.0f, 32.0f, "SIZE",
       "Size of the plate: lengths of its delays, 50 to 200 % (100 %: the original). Larger: deeper, "
       "denser and longer (the decay grows with the size). A change glides in 100 ms (brief pitch glide)." },
-    { kParamHighCut,   675.0f, 298.0f, 18.0f, "HIGH CUT",
+    { kParamHighCut,   696.0f, 245.0f, 18.0f, "HIGH CUT",
       "Low-pass on the reverb only (12 dB / octave): a darker tail, the attack and the dry sound "
       "untouched. At the maximum: off." },
-    { kParamModDepth,  510.0f, 318.0f, 16.0f, "DEPTH",
+    { kParamModDepth,  360.0f, 270.0f, 32.0f, "DEPTH",
       "Depth of the modulation of the plate (slow chorus of the tail), 0 to 200 %. 100 %: the "
       "original. 0: still plate, no loss of highs." },
-    { kParamModRate,   585.0f, 318.0f, 16.0f, "RATE",
+    { kParamModRate,   470.0f, 270.0f, 32.0f, "RATE",
       "Rate of the modulation of the plate, 0.1 to 5 Hz. 1.2 Hz: the original. A change keeps the "
       "phase (no click)." },
     { kParamNote,      130.0f, 162.0f, 44.0f, "PRE-DELAY",
       "Pre-delay locked to the tempo of the host (SYNC on): a note value, 1/64 to 1/4, dotted (D) or "
       "triplet (T); 120 BPM when the host gives no tempo, at most 2 s. A change of tempo crossfades." },
-    { kParamMonoBass,  826.0f, 108.0f, 18.0f, "MONO BASS",
+    { kParamMonoBass,  696.0f, 135.0f, 18.0f, "MONO BASS",
       "The reverb is mono below this frequency (its side signal high-passed, 12 dB / octave): a "
       "steadier low end, safe in mono. At the minimum: off." },
 };
@@ -245,15 +245,13 @@ static_assert(kKnobs[kKnobPredelay].param == kParamPredelay && kKnobs[kKnobBandw
               && kKnobs[kKnobMonoBass].param == kParamMonoBass,
               "kKnobs: one entry per knob, in the order of the enum");
 
-static const Rect kFreeze  = { 270, 303, 104, 30 };
-static const Rect kRt      = { 270, 372, 330, 72 };    // decay time readout
+static const Rect kFreeze  = { 702, 17, 72, 24 };     // header, by Bypass
+static const Rect kRt      = { 265, 372, 300, 72 };    // decay time readout
 static const Rect kPreset  = { 344, 16, 176, 26 };     // drop-down box; the list opens below it
 static const Rect kAB      = { 528, 17, 48, 24 };      // A | B
 static const Rect kCopy    = { 580, 17, 34, 24 };      // copy the current set to the other
-static const Rect kOptions = { 622, 17, 72, 24 };      // opens the options panel
-static const Rect kOptionsPanel = { 600, 50, 280, 132 };   // options: stereo input, mono bass
-static const Rect kStereoBtn = { 616, 86, 132, 28 };       // in the options panel
-static const Rect kSync    = { 186, 200, 44, 18 };     // pre-delay locked to the tempo
+static const Rect kSync    = { 186, 200, 46, 18 };     // pre-delay locked to the tempo
+static const Rect kStereoBtn = { 186, 362, 46, 18 };   // stereo input, by Bandwidth as SYNC by Pre-delay
 static const float kMenuItemH = 22.0f;     // preset list: item
 static const float kMenuHeaderH = 20.0f;   // section title (FACTORY, USER)
 static const float kMenuDividerH = 9.0f;   // line before "Save current settings..."
@@ -266,21 +264,21 @@ struct MenuRow {
     int index;    // factory preset, saved preset (in fUserNames) or section (0 factory, 1 user)
     float y, h;   // y from the top of the list content
 };
-static const Rect kTheme   = { 702, 17, 72, 24 };
+static const Rect kTheme   = { 622, 17, 72, 24 };
 static const Rect kBypass  = { 782, 14, 98, 30 };
 
 // meters: three horizontal bars in the output section
 static const float kMeterX = 690.0f, kMeterW = 132.0f, kMeterH = 9.0f;
 static const float kMeterY[3] = { 384.0f, 404.0f, 424.0f };   // IN, REVERB, OUT
 static const Rect kDuckMeter = { 272, 473, 110, 8 };             // cut of the reverb by the ducking
-static const Rect kClearBtn  = { 470, 498, 84, 30 };              // clear on / off
-static const Rect kLink      = { 760, 92, 22, 18 };               // chain: dry and reverb faders linked
-static const Rect kClearState = { 470, 540, 84, 30 };             // off, waiting, armed, cleared
+static const Rect kClearBtn  = { 707, 468, 44, 18 };              // clear on / off (place of the CUT meter)
+static const Rect kLink      = { 775, 92, 22, 18 };               // chain: dry and reverb faders linked
+static const Rect kClearState = { 757, 468, 80, 18 };             // off, waiting, armed, cleared
 
 // hover zones with a tooltip (knobs are handled separately)
 enum {
     kZoneFreeze = 0, kZoneRt, kZonePlot, kZonePreset, kZoneBypass, kZoneTheme, kZoneAB, kZoneCopy,
-    kZoneIn, kZoneWet, kZoneOut, kZoneDuckMeter, kZoneClear, kZoneClearState, kZoneLink, kZoneOptions,
+    kZoneIn, kZoneWet, kZoneOut, kZoneDuckMeter, kZoneClear, kZoneClearState, kZoneLink,
     kZoneStereo, kZoneSync, kZoneHistory, kZoneHistLength, kNumZones
 };
 
@@ -299,7 +297,7 @@ static const Zone kZones[kNumZones] = {
       "(table interpolated, within about 10 %)." },
     { kPlot, "DECAY TIME AND TONE",
       "Brass: decay time (RT60, left scale, seconds) against frequency, set by Tail and Damping. "
-      "Steel, dashed: tone of the reverb (right scale, dB), set by Bandwidth and Low cut." },
+      "Steel, dashed: tone of the reverb (right scale, dB), set by Bandwidth, Low cut and High cut." },
     { kPreset, "PRESETS",
       "Click to choose a preset: factory presets, then yours (saved for all projects on this "
       "computer). Wheel: next / previous. A * means a setting was changed since it was loaded." },
@@ -330,8 +328,6 @@ static const Zone kZones[kNumZones] = {
       "Links the Dry and Reverb faders as the Blend of the original: raising one lowers the "
       "other (their gains add up to 1, both at most 0 dB). When linking, the Dry fader sets the "
       "mix. Linked, both show one parameter, Mix, which the host automates." },
-    { kOptions, "OPTIONS",
-      "Stereo input and mono bass. The dot is lit when one of them is on." },
     { kStereoBtn, "STEREO INPUT",
       "Off (the original): the plate takes the mono sum of L and R. On: each channel feeds its own "
       "half of the plate, the onset of the reverb follows the panning (the tail ends near the centre). "
@@ -497,7 +493,6 @@ protected:
         if (!fDemoOptionsDone)
         {
             fDemoOptionsDone = true;
-            fOptionsOpen = true;
             setOnce(kParamStereoIn, 1.0f);
             setOnce(kParamMonoBass, 120.0f);
         }
@@ -551,8 +546,6 @@ protected:
         drawClearSection();
         drawHistory();
         drawDecayPlot();
-        if (fOptionsOpen)
-            drawOptionsPanel();
         if (fMenuOpen)
             drawPresetMenu();
         else if (fNaming)
@@ -594,15 +587,6 @@ protected:
             menuClick(x, y, ev.button == kMouseButtonLeft);
             return true;
         }
-        // options panel: a click outside closes it (and goes no further)
-        if (fOptionsOpen && !kOptionsPanel.contains(x, y))
-        {
-            fOptionsOpen = false;
-            fHover = -1;
-            repaint();
-            return true;
-        }
-
         const int k = knobAt(x, y);
 
         if (ev.button == kMouseButtonRight)
@@ -619,16 +603,7 @@ protected:
         if (ev.button != kMouseButtonLeft)
             return false;
 
-        if (fOptionsOpen)
-        {
-            if (k < 0)
-            {
-                if (kStereoBtn.contains(x, y))
-                    toggle(kParamStereoIn);
-                return true;   // inside the panel, nothing more
-            }
-        }
-        else if (clickButton(x, y))
+        if (clickButton(x, y))
             return true;
 
         if (k < 0)
@@ -654,10 +629,10 @@ protected:
         return true;
     }
 
-    // buttons and selectors of the window (the options panel closed); true if one was clicked
+    // buttons and selectors of the window; true if one was clicked
     bool clickButton(const float x, const float y)
     {
-        if (kOptions.contains(x, y)) { fOptionsOpen = true; fHover = -1; repaint(); return true; }
+        if (kStereoBtn.contains(x, y)) { toggle(kParamStereoIn); return true; }
         if (kSync.contains(x, y)) { toggle(kParamSync); return true; }
         if (kHistLengthBox.contains(x, y))
         {
@@ -716,7 +691,7 @@ protected:
         int h = knobAt(x, y);
         if (h < 0)
             for (int z = 0; z < kNumZones; ++z)
-                if (kZones[z].r.contains(x, y) && zoneActive(z))
+                if (kZones[z].r.contains(x, y))
                 {
                     h = kHoverZoneBase + z;
                     break;
@@ -755,7 +730,7 @@ protected:
         }
         const int k = knobAt(x, y);
         if (k < 0)
-            return fOptionsOpen;
+            return false;
         const int p = kKnobs[k].param;
         if (p == kParamNote)
         {
@@ -776,13 +751,6 @@ protected:
         if (fMenuOpen && ev.press && ev.key == kKeyEscape)
         {
             closeMenu();
-            return true;
-        }
-        if (fOptionsOpen && fEdit < 0 && ev.press && ev.key == kKeyEscape)
-        {
-            fOptionsOpen = false;
-            fHover = -1;
-            repaint();
             return true;
         }
         if (fNaming)
@@ -934,28 +902,14 @@ private:
 
     bool synced() const { return fValues[kParamSync] > 0.5f; }
 
-    // pre-delay: the knob in ms, or the note value when locked; mono bass: in the options panel
+    // pre-delay: the knob in ms, or the note value when locked
     bool knobVisible(const int i) const
     {
         if (i == kKnobPredelay)
             return !synced();
         if (i == kKnobNote)
             return synced();
-        if (i == kKnobMonoBass)
-            return fOptionsOpen;
         return true;
-    }
-
-    // hover zones: those of the options panel while it is open, the others while it is closed
-    bool zoneActive(const int z) const
-    {
-        const bool inPanel = z == kZoneStereo;
-        return fOptionsOpen ? inPanel : !inPanel;
-    }
-
-    bool optionsOn() const
-    {
-        return fValues[kParamStereoIn] > 0.5f || fValues[kParamMonoBass] > kMonoBassOff + 0.05f;
     }
 
     // linked: the dry and reverb faders are views of the parameter Mix
@@ -1388,7 +1342,7 @@ private:
     {
         for (int i = 0; i < kNumKnobs; ++i)
         {
-            if (!knobVisible(i) || (fOptionsOpen && i != kKnobMonoBass))
+            if (!knobVisible(i))
                 continue;
             const float dx = x - kKnobs[i].cx, dy = y - kKnobs[i].cy;
             if (isFader(kKnobs[i].param))
@@ -1740,11 +1694,8 @@ private:
         segmented(kAB, ab, 2, fSlot, 11);
         button(kCopy, false, fSlot == 0 ? "A>B" : "B>A", 9);
 
-        // options (lit dot: one of them on)
-        button(kOptions, fOptionsOpen, nullptr);
-        led(kOptions.x + 11, kOptions.y + kOptions.h * 0.5f, optionsOn());
-        label(kOptions.x + kOptions.w * 0.5f + 6, kOptions.y + kOptions.h * 0.5f, 9, fOptionsOpen ? fT->onAccent : fT->dim,
-              ALIGN_CENTER | ALIGN_MIDDLE, "OPTIONS", 1);
+        // freeze
+        ledButton(kFreeze, frozen(), "FREEZE");
 
         // theme
         segmented(kTheme, kThemeNames, TinplatePrefs::kThemeCount, fTheme, 9);
@@ -1762,6 +1713,7 @@ private:
         sectionTitle(kSecIn, "1", "INPUT", "into the plate");
         drawKnob(synced() ? kKnobNote : kKnobPredelay);
         button(kSync, synced(), "SYNC", 8.5f);
+        button(kStereoBtn, fValues[kParamStereoIn] > 0.5f, "STEREO", 8.5f);
         divider(kSecIn.x + 12, kSecIn.x + kSecIn.w - 12, 262);
         drawKnob(kKnobBandwidth);
     }
@@ -1781,12 +1733,7 @@ private:
         drawKnob(kKnobModDepth);
         drawKnob(kKnobModRate);
         globalAlpha(1.0f);
-        divider(kSecTank.x + 12, kSecTank.x + kSecTank.w - 12, 290);
-
-        button(kFreeze, frozen, nullptr);
-        led(kFreeze.x + 16, kFreeze.y + kFreeze.h * 0.5f, frozen);
-        label(kFreeze.x + kFreeze.w * 0.5f + 9, kFreeze.y + kFreeze.h * 0.5f, 11, frozen ? fT->onAccent : fT->dim,
-              ALIGN_CENTER | ALIGN_MIDDLE, "FREEZE", 2);
+        divider(kSecTank.x + 12, kSecTank.x + kSecTank.w - 12, 352);
 
         // decay time readout
         const float cx = kSecTank.x + kSecTank.w * 0.5f;
@@ -1810,6 +1757,7 @@ private:
         drawKnob(kKnobWidth);
         drawKnob(kKnobLowCut);
         drawKnob(kKnobHighCut);
+        drawKnob(kKnobMonoBass);
         // scale of the dry and reverb faders, between them and the knobs
         const KnobDef& f = kKnobs[kKnobDry];
         const float marks[] = { 6.0f, 0.0f, -12.0f, -24.0f, -40.0f, -60.0f };
@@ -1872,20 +1820,24 @@ private:
         label(m.x + m.w + 8, cy, 9.5f, fT->dim, ALIGN_LEFT | ALIGN_MIDDLE, b);
     }
 
+    // a switch with a LED (freeze, stereo input)
+    void ledButton(const Rect& r, const bool on, const char* str)
+    {
+        button(r, on, nullptr);
+        led(r.x + 14, r.y + r.h * 0.5f, on);
+        label(r.x + r.w * 0.5f + 8, r.y + r.h * 0.5f, 9.5f, on ? fT->onAccent : fT->dim, ALIGN_CENTER | ALIGN_MIDDLE, str, 1.2f);
+    }
+
     void drawClearSection()
     {
         const bool on = fValues[kParamClear] > 0.5f;
-        sectionTitle(kSecClear, "5", "CLEAR", "a new attack empties the plate");
-        button(kClearBtn, on, nullptr);
-        led(kClearBtn.x + 16, kClearBtn.y + kClearBtn.h * 0.5f, on);
-        label(kClearBtn.x + kClearBtn.w * 0.5f + 9, kClearBtn.y + kClearBtn.h * 0.5f, 11, on ? fT->onAccent : fT->dim,
-              ALIGN_CENTER | ALIGN_MIDDLE, "CLEAR", 2);
+        sectionTitle(kSecClear, "5", "CLEAR", "");
+        button(kClearBtn, on, "CLEAR", 8.5f);
 
         const int state = static_cast<int>(fValues[kParamMeterClear] + 0.5f);
         const char* text = !on ? "off" : state == 2 ? "CLEARED" : state == 1 ? "ARMED" : "waiting";
         const Color c = !on ? fT->faint : state == 2 ? fT->hot : state == 1 ? fT->gold : fT->dim;
-        label(kClearState.x + kClearState.w * 0.5f, kClearState.y + kClearState.h * 0.5f, 10.5f, c,
-              ALIGN_CENTER | ALIGN_MIDDLE, text, 1.5f);
+        label(kClearState.x, kClearState.y + kClearState.h * 0.5f, 9.5f, c, ALIGN_LEFT | ALIGN_MIDDLE, text, 1.0f);
 
         if (!on)
             globalAlpha(0.35f);   // no effect while clear is off
@@ -2486,41 +2438,6 @@ private:
     }
 #endif
 
-    // options panel, over everything: stereo input and mono bass
-    void drawOptionsPanel()
-    {
-        const Rect& r = kOptionsPanel;
-        beginPath();
-        rect(r.x - 10, r.y - 6, r.w + 20, r.h + 22);
-        roundedRect(r.x, r.y, r.w, r.h, 6);
-        pathWinding(CW);
-        fillPaint(boxGradient(r.x, r.y + 3, r.w, r.h, 8, 12, fT->panelShadow, transparent(fT->panelShadow)));
-        fill();
-        beginPath();
-        roundedRect(r.x, r.y, r.w, r.h, 6);
-        fillColor(fT->tipBg);
-        fill();
-        strokeWidth(1.0f);
-        strokeColor(fT->tipEdge);
-        stroke();
-        label(r.x + 14, r.y + 17, 10, fT->gold, ALIGN_LEFT | ALIGN_MIDDLE, "OPTIONS", 1.5f);
-
-        const bool stereo = fValues[kParamStereoIn] > 0.5f;
-        button(kStereoBtn, stereo, nullptr);
-        led(kStereoBtn.x + 16, kStereoBtn.y + kStereoBtn.h * 0.5f, stereo);
-        label(kStereoBtn.x + kStereoBtn.w * 0.5f + 9, kStereoBtn.y + kStereoBtn.h * 0.5f, 10, stereo ? fT->onAccent : fT->dim,
-              ALIGN_CENTER | ALIGN_MIDDLE, "STEREO INPUT", 1.2f);
-        fontFaceId(fFont);
-        fontSize(9);
-        textLetterSpacing(0);
-        fillColor(fT->dim);
-        textAlign(ALIGN_LEFT | ALIGN_TOP);
-        textBox(kStereoBtn.x, kStereoBtn.y + kStereoBtn.h + 8, kStereoBtn.w + 4,
-                stereo ? "L and R each feed one half of the plate: the reverb follows the panning."
-                       : "The plate takes the mono sum of L and R (the original).", nullptr);
-        drawKnob(kKnobMonoBass);
-    }
-
     // open preset list, drawn over everything: factory presets, a line, saved presets, a line,
     // "Save current settings..."; the current preset is marked with a dot
     void drawPresetMenu()
@@ -2777,8 +2694,7 @@ private:
     // meters: repainted at most 30 times per second
     bool fMetersChanged = false;
     std::chrono::steady_clock::time_point fLastPaint, fLastPush;
-    // options panel; drag of an integer parameter (accumulated position)
-    bool fOptionsOpen = false;
+    // drag of an integer parameter (accumulated position)
     float fDragNorm = 0.0f;
     // history: fHistPos is the newest point; length shown (index into kHistSeconds)
     float fHist[kNumSeries][kHistorySize];

@@ -106,8 +106,8 @@ the user (section~\ref{sec:files}).
 \item For each new hit (chord, drum) to start in a clean reverb, switch \ctl{CLEAR} on
   (section 5). The history (section 6) shows the input and the thresholds, to set these two
   sections by eye.
-\item A stereo source (piano, guitar recorded in stereo): \ctl{OPTIONS}, \ctl{STEREO INPUT}; a
-  firmer low end: \ctl{MONO BASS}.
+\item A stereo source (piano, guitar recorded in stereo): \ctl{STEREO} (section 1); a firmer
+  low end: \ctl{MONO BASS} (section 3).
 \end{enumerate}
 
 % ==============================================================================================
@@ -115,13 +115,14 @@ the user (section~\ref{sec:files}).
 
 The window (900 × 858 points, resizable with its proportions kept, sharp on high-density
 screens) reads from left to right in the order of the signal: three numbered sections joined by
-arrows, then the sections \ctl{DUCKING} (4) and \ctl{CLEAR} (5), the \ctl{HISTORY} (6) and the
+arrows, then the sections \ctl{DUCKING} (4) and \ctl{CLEAR} (5), mirror images of each other,
+the \ctl{HISTORY} (6) and the
 plot of the decay time at the bottom. Every element has a tooltip; for a knob, its title gives
 the detailed value.
 
 \begin{center}
 \includegraphics[width=0.8\textwidth]{capture_interface_tin.png}\\[2pt]
-\small Light theme \ctl{TIN}, Clear on, pre-delay locked to the tempo, \ctl{OPTIONS} panel open.
+\small Light theme \ctl{TIN}; Freeze, Sync, stereo input, Mono bass and Clear on.
 \end{center}
 
 \subsection{Header}
@@ -135,38 +136,37 @@ the detailed value.
   (the set left is kept, the other one is loaded; on the first visit, B starts as a copy of A).
   \ctl{A>B} (or \ctl{B>A}) copies the current set into the other one. Both sets are saved with
   the project.
-\item[OPTIONS.] Opens a small panel: \ctl{STEREO INPUT} (button) and \ctl{MONO BASS} (knob),
-  described in section~\ref{sec:controls}. The dot of the button lights when one of the two
-  options is on. A click outside the panel, or \textsf{Esc}, closes it.
 \item[SLATE | TIN.] Dark or light theme (grey with a slight green tint), no effect on the
   sound; it is a preference of the computer, shared by all instances and all projects.
+\item[FREEZE.] Freezes the reverb (lit LED); Tail, Damping, Depth and Rate are then greyed,
+  since they no longer act (section~\ref{sec:freeze}).
 \item[ACTIVE / BYPASSED.] The Bypass declared to the host (section~\ref{sec:smoothing}).
 \end{description}
 
 \subsection{Section 1: INPUT}
 \ctl{PRE-DELAY} and \ctl{BANDWIDTH}: what goes into the plate. The small \ctl{SYNC} button locks
 the pre-delay to the tempo of the host: the Pre-delay knob then chooses a note value (1/64 to
-1/4, dotted ``D'' or triplet ``T''). Under Bandwidth, its value and the $-3$\dB{}
+1/4, dotted ``D'' or triplet ``T''). The small \ctl{STEREO} button, by Bandwidth, makes each
+channel enter its own half of the plate (stereo input). Under Bandwidth, its value and the $-3$\dB{}
 frequency of the filter at the current sample rate (``open'' when it stays above
 $-3$\dB{} up to the Nyquist frequency).
 
 \subsection{Section 2: PLATE}
-\ctl{TAIL} and \ctl{DAMPING}, the two big knobs of the loop; under Damping, the $-3$\dB{}
-frequency of its filter. Right of \ctl{FREEZE}, three small knobs: \ctl{SIZE} (size of the
-plate), \ctl{DEPTH} and \ctl{RATE} (depth and rate of the modulation, greyed while frozen,
-which stops it). In the middle, the decay time (RT60) at 500\,Hz, large, and at 125\,Hz and
-4\,kHz. The \ctl{FREEZE} button freezes the reverb; Tail and Damping are then greyed, since they
-no longer act.
+Five knobs of the same size in two rows: \ctl{TAIL}, \ctl{DAMPING} (under it, the $-3$\dB{}
+frequency of its filter) and \ctl{SIZE} (size of the plate); then \ctl{DEPTH} and \ctl{RATE}
+(depth and rate of the modulation, greyed while frozen, which stops it). Below, the decay time
+(RT60) at 500\,Hz, large, and at 125\,Hz and 4\,kHz (``infinite'' while frozen).
 
 \subsection{Section 3: OUTPUT}
-\ctl{WIDTH}, \ctl{LOW CUT} and \ctl{HIGH CUT}, then three faders: \ctl{DRY} (level of the direct
+Four small knobs in a square: \ctl{WIDTH} and \ctl{MONO BASS} (width), \ctl{LOW CUT} and
+\ctl{HIGH CUT} (tone); then three faders: \ctl{DRY} (level of the direct
 sound), \ctl{REVERB} (level of the reverb alone) and \ctl{OUTPUT} (output gain). The first two
 go from ``off'' (at the bottom) to $+6$\dB, with the scale on their left (0\dB{} at four
 fifths of the travel); Output goes from $-24$ to $+12$\dB. The small chain above Dry and Reverb
 links them (whole chain, golden) or unlinks them (broken chain): see Dry, Reverb
 (section~\ref{sec:controls}). A fader follows the mouse (\textsf{Shift}: four times finer) and
 otherwise works as a knob. Then three peak meters: \ctl{IN} (input), \ctl{REVERB} (reverb alone,
-after Low cut, High cut, Width and ducking, before its fader), \ctl{OUT} (output), in dBFS;
+after Low cut, High cut, Mono bass, Width and ducking, before its fader), \ctl{OUT} (output), in dBFS;
 after a peak, the display falls back with a time constant of 0.25\,s.
 
 \subsection{Section 4: DUCKING}
@@ -175,8 +175,9 @@ while Duck is 0 (``off''), since they do not act. At the top, the \ctl{CUT} mete
 much the reverb is lowered now (0 to 30\dB).
 
 \subsection{Section 5: CLEAR}
-The \ctl{CLEAR} button (off by default) and \ctl{FLOOR}, \ctl{TRIGGER}, \ctl{FADE},
-\ctl{WINDOW}, greyed while it is off. Under the button, the state of the detection:
+The small \ctl{CLEAR} button at the top right (off by default; the place of the \ctl{CUT} meter
+in section 4) and \ctl{FLOOR}, \ctl{TRIGGER}, \ctl{FADE}, \ctl{WINDOW}, greyed while it is off.
+Right of the button, the state of the detection:
 ``waiting'' (the input has not gone under Floor yet, or the old reverb is still fading
 out), ``ARMED'' (the next attack will empty the plate), ``CLEARED'' (lit 0.2\,s at
 each clearing).
