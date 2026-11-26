@@ -275,6 +275,6 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   et E Mono bass (bouton STEREO dans INPUT, Mono bass dans OUTPUT ; FREEZE passé dans l'en-tête), G pré-retard au tempo (SYNC), I historique (section 6, fenêtre
   900 × 858), J trois préréglages, L manuel anglais (installateur : deux manuels), K cas
   « options ». Version 1.2.0 dans `getVersion`, l'installateur, `README.md`, les manuels.
-  Validateur CLAP abandonné (décision de l'utilisateur). Interface revue avec l'utilisateur. Reste : ergonomie à revoir avec l'utilisateur, écoute, vrai hôte, release.
+  Validateur CLAP abandonné (décision de l'utilisateur). Interface revue avec l'utilisateur ; release publiée. Reste : écoute, réglage des préréglages à l'oreille, vrai hôte ; tout changement livré demande un nouveau numéro.
 - Pistes non faites : réglages des préréglages à l'oreille ;
   autres pistes dans `AMELIORATIONS.md`.
