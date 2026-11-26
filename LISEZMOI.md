@@ -254,8 +254,8 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
 - **Release GitHub** (procédure ; `V` = numéro) : `./build.sh` complet sur `master` propre ;
   fichiers assemblés dans `build/release/` (non suivi) : installateur
   `bin/Tinplate-Reverb-V-setup.exe`, `Tinplate-Reverb-V-windows.zip` (VST3, CLAP),
-  `Tinplate-Reverb-V-linux-x86_64.tar.gz` (VST3, CLAP, LV2), chacun avec `COPYING` et le manuel, et le
-  manuel seul `Tinplate-Reverb-manuel.pdf` ; notes en anglais (`build/release/notes-V.md` :
+  `Tinplate-Reverb-V-linux-x86_64.tar.gz` (VST3, CLAP, LV2), chacun avec `COPYING` et les deux
+  manuels, et les manuels seuls `Tinplate-Reverb-manual.pdf` et `Tinplate-Reverb-manuel.pdf` ; notes en anglais (`build/release/notes-V.md` :
   nouveautés, téléchargements, installation, essais faits et non faits, licence) ; étiquette annotée
   `vV` (auteur Claude) poussée, puis `/usr/bin/gh release create vV --repo tterraz/tinplate_reverb
   --title ... --notes-file notes-V.md <fichiers>` (`gh` hors du PATH, connecté au compte `tterraz`).
@@ -271,10 +271,10 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   (demande de l'utilisateur, aucun utilisateur de 1.0.0) : `v1.1.0` est la seule release.
 - **Après `v1.1.0` (session 72, non publié)** : C Size, A High cut, K banc CPU, B Depth/Rate,
   H Mix lié.
-- **1.2.0 (session 73, 2026-11-26, non publiée ; commit `dcdd383`)** : D entrée stéréo
+- **1.2.0 (session 73, 2026-11-26, release GitHub `v1.2.0` publiée, notes `build/release/notes-1.2.0.md` ; commits `dcdd383`, `8531bb3`)** : D entrée stéréo
   et E Mono bass (bouton STEREO dans INPUT, Mono bass dans OUTPUT ; FREEZE passé dans l'en-tête), G pré-retard au tempo (SYNC), I historique (section 6, fenêtre
   900 × 858), J trois préréglages, L manuel anglais (installateur : deux manuels), K cas
   « options ». Version 1.2.0 dans `getVersion`, l'installateur, `README.md`, les manuels.
-  Validateur CLAP abandonné (décision de l'utilisateur). Reste : ergonomie à revoir avec l'utilisateur, écoute, vrai hôte, release.
+  Validateur CLAP abandonné (décision de l'utilisateur). Interface revue avec l'utilisateur. Reste : ergonomie à revoir avec l'utilisateur, écoute, vrai hôte, release.
 - Pistes non faites : réglages des préréglages à l'oreille ;
   autres pistes dans `AMELIORATIONS.md`.

@@ -2,7 +2,7 @@
 
 Proposées le 2026-11-26 (après la release `v1.1.0`) ; toutes faites le 2026-11-26 sauf ce qui
 revient à l'utilisateur (écoute, réglage des préréglages à l'oreille, vrai hôte) ; validateur
-CLAP abandonné (décision). Version portée à 1.2.0 (non publiée). Toute livraison
+CLAP abandonné (décision). Version 1.2.0 publiée (release GitHub `v1.2.0`, 2026-11-26). Toute livraison
 demandera un nouveau numéro de version. Détails de l'existant : `LISEZMOI.md`.
 
 ## Son
