@@ -310,7 +310,7 @@ static const Zone kZones[kNumZones] = {
     { kLink, "LINK",
       "Links the Dry and Reverb faders as the Blend of the original: raising one lowers the "
       "other (their gains add up to 1, both at most 0 dB). When linking, the Dry fader sets the "
-      "mix. Host automation follows the link too: the fader moved last leads." },
+      "mix. Linked, both show one parameter, Mix, which the host automates." },
 };
 
 static const int kHoverZoneBase = 100;
@@ -365,15 +365,9 @@ protected:
             return;   // keep the meters of the screenshot
 #endif
         fValues[index] = value;
-        // linked (by the host too): the other level as the DSP computes it
-        if (index == kParamDry || index == kParamWet)
-        {
-            const int q = partnerOf(static_cast<int>(index));
-            if (q >= 0)
-                fValues[q] = TinplateLaw::linkedDb(value);
-        }
-        else if (index == kParamLink && linked())
-            fValues[kParamWet] = TinplateLaw::linkedDb(fValues[kParamDry]);
+        // linked (by the host too): the faders show the levels of the mix
+        if ((index == kParamMix || index == kParamLink || index == kParamDry || index == kParamWet) && linked())
+            showMix();
         if (index < static_cast<uint32_t>(kParamFirstOutput))
             repaint();
         else
@@ -499,9 +493,7 @@ protected:
         {
             if (ev.button == kMouseButtonLeft && fDrag >= 0)
             {
-                editParameter(kKnobs[fDrag].param, false);
-                if (fDragPartner >= 0)
-                    editParameter(fDragPartner, false);
+                editParameter(target(kKnobs[fDrag].param), false);
                 fDrag = -1;
                 repaint();
                 return true;
@@ -563,10 +555,7 @@ protected:
 
         fDrag = k;
         fLastY = y;
-        editParameter(p, true);
-        fDragPartner = partnerOf(p);
-        if (fDragPartner >= 0)
-            editParameter(fDragPartner, true);
+        editParameter(target(p), true);
         repaint();
         return true;
     }
@@ -809,27 +798,34 @@ private:
 
     bool linked() const { return fValues[kParamLink] > 0.5f; }
 
-    // the other of the linked dry and reverb faders, or -1
-    int partnerOf(const int p) const
+    // linked: the dry and reverb faders are views of the parameter Mix
+    bool viewOfMix(const int p) const { return linked() && !fLoading && (p == kParamDry || p == kParamWet); }
+
+    // the parameter an edit of p writes
+    int target(const int p) const { return viewOfMix(p) ? static_cast<int>(kParamMix) : p; }
+
+    // faders at the levels of the mix (display only: the levels themselves are not written)
+    void showMix()
     {
-        if (!linked() || fLoading)
-            return -1;
-        return p == kParamDry ? kParamWet : p == kParamWet ? kParamDry : -1;
+        fValues[kParamWet] = TinplateLaw::mixWetDb(fValues[kParamMix]);
+        fValues[kParamDry] = TinplateLaw::mixDryDb(fValues[kParamMix]);
     }
 
     void changeValue(const int p, float v)
     {
-        const int q = partnerOf(p);
-        if (q >= 0)
+        if (viewOfMix(p))
         {
-            // linked, as the blend of the original: gains of dry and reverb add up to 1
-            v = std::fmin(v, 0.0f);
-            const float w = TinplateLaw::linkedDb(v);
-            if (fValues[q] != w)
+            // linked, as the blend of the original: a fader sets the mix (both at most 0 dB)
+            const float g = TinplateLaw::levelGain(std::fmin(v, 0.0f));
+            const float mix = TinplateLaw::mixOfWetGain(p == kParamWet ? g : 1.0f - g);
+            if (fValues[kParamMix] != mix)
             {
-                fValues[q] = w;
-                setParameterValue(q, w);
+                fValues[kParamMix] = mix;
+                setParameterValue(kParamMix, mix);
             }
+            showMix();
+            repaint();
+            return;
         }
         if (fValues[p] == v)
             return;
@@ -838,26 +834,34 @@ private:
         repaint();
     }
 
-    // one complete edit gesture (both faders when they are linked)
+    // one complete edit gesture
     void setOnce(const int p, const float v)
     {
-        const int q = partnerOf(p);
-        editParameter(p, true);
-        if (q >= 0)
-            editParameter(q, true);
+        const int t = target(p);
+        editParameter(t, true);
         changeValue(p, v);
-        editParameter(p, false);
-        if (q >= 0)
-            editParameter(q, false);
+        editParameter(t, false);
     }
 
-    // link or unlink the dry and reverb faders (parameter Link, applied by the DSP); when
-    // linking, the dry fader sets the mix
+    // link or unlink the dry and reverb faders (parameters Link and Mix, applied by the DSP).
+    // Linking: the dry fader sets the mix.  Unlinking: the levels take those shown (no jump).
     void toggleLink()
     {
-        toggle(kParamLink);
-        if (linked())
-            setOnce(kParamDry, fValues[kParamDry]);
+        if (!linked())
+        {
+            const float g = TinplateLaw::levelGain(std::fmin(fValues[kParamDry], 0.0f));
+            setOnce(kParamMix, TinplateLaw::mixOfWetGain(1.0f - g));
+            setOnce(kParamLink, 1.0f);
+            showMix();
+        }
+        else
+        {
+            const float wet = fValues[kParamWet], dry = fValues[kParamDry];
+            setOnce(kParamLink, 0.0f);
+            fValues[kParamWet] = fValues[kParamDry] = 1e9f;   // force the writes
+            setOnce(kParamWet, wet);
+            setOnce(kParamDry, dry);
+        }
         repaint();
     }
 
@@ -965,6 +969,8 @@ private:
             fPresetValues[i] = values[i];
         }
         fLoading = false;
+        if (linked())
+            showMix();
         repaint();
     }
 
@@ -1194,7 +1200,8 @@ private:
     bool presetModified() const
     {
         for (int i = 0; i < kPresetParamCount; ++i)
-            if (std::fabs(fValues[i] - fPresetValues[i]) > 1e-4f)
+            if (!((i == kParamDry || i == kParamWet) && linked() && fPresetValues[kParamLink] > 0.5f)
+                && std::fabs(fValues[i] - fPresetValues[i]) > 1e-4f)
                 return true;
         return false;
     }
@@ -2358,7 +2365,6 @@ private:
     Slot fSlots[2];
     int fSlot = 0;
     bool fLoading = false;      // loadValues: no linking
-    int fDragPartner = -1;      // linked fader moved with the one dragged
     // name of a preset being saved
     bool fNaming = false, fNameError = false;
     std::string fNameText;

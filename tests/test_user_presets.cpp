@@ -48,14 +48,14 @@ int main()
     check(!save("Default", kTinplatePresets[0].values) && !save("vocal PLATE", kTinplatePresets[0].values),
           "factory names refused");
 
-    const float a[kPresetParamCount] = { 0.8123457f, 0.55f, 0.3f, 137.5f, 150.0f, 2.5f, -16.25f, -3.5f, 1.0f, 37.5f, 143.7f, 8500.0f, 125.0f,
+    const float a[kPresetParamCount] = { 0.8123457f, 0.55f, 0.3f, 137.5f, 150.0f, 2.5f, -16.25f, -3.5f, 1.0f, 0.375f, 37.5f, 143.7f, 8500.0f, 125.0f,
                                          -1.75f, 9.5f, -27.25f, 3.3f, 812.0f, 1.0f, -55.5f, -12.0f, 80.0f,
                                          35.0f };
     check(save("Bright", a), "save");
     float r[kPresetParamCount] = { 0 };
     check(load("Bright", r) && sameValues(a, r), "read back exactly");
 
-    const float b[kPresetParamCount] = { 0, 0, 0, 50, 0, 0.1f, -60, -60, 0, 0, 20, 1000, 0, -24, 0, -60, 1, 50, 0, -80, -60, 10, 1 };
+    const float b[kPresetParamCount] = { 0, 0, 0, 50, 0, 0.1f, -60, -60, 0, 0, 0, 20, 1000, 0, -24, 0, -60, 1, 50, 0, -80, -60, 10, 1 };
     check(save("aggressive", b) && save("Calm", kTinplatePresets[2].values), "save two more");
     const std::vector<std::string> names = list();
     check(names.size() == 3 && names[0] == "aggressive" && names[1] == "Bright" && names[2] == "Calm",

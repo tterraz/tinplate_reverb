@@ -34,8 +34,8 @@
  *     steady size); 200 %: finite output, longer decay than 100 %.
  * 15. Modulation: a change of rate or depth while playing gives no click; depth 200 % and rate
  *     5 Hz: finite output; depth 0: no modulation (output different from 100 %).
- * 13. Link: dry and wet linked by the DSP; when linking, the dry level leads; automation of the
- *     wet level alone then moves the dry one (output identical to both levels set by hand).
+ * 13. Link: the parameter Mix sets dry and wet as the blend of CAPS; the levels are ignored,
+ *     even automated; automation of Mix gives, after the ramp, the output of the new mix.
  */
 #include "src/DistrhoPluginInternal.hpp"
 #include "src/DistrhoPlugin.cpp"
@@ -219,19 +219,27 @@ int main()
             std::vector<float> L, R, oL, oR, cL, cR;
             testSignal(sr, sr > 100000.0 ? 1.1 : 2.1, L, R);
             for (const auto& c0 : sets)
-                for (int pass = 0; pass < 2; ++pass)
+                for (int pass = 0; pass < 3; ++pass)
                 {
-                    // pass 0: the blend of the set; pass 1: wet only (blend 1)
-                    const float c[4] = { c0[0], c0[1], c0[2], pass ? 1.0f : c0[3] };
-                    if (pass == 1 && c0[3] == 1.0f)
+                    // pass 0: linked, Mix = the blend of the set; pass 1: the levels of that
+                    // blend in dB; pass 2: levels, wet only (blend 1)
+                    const float c[4] = { c0[0], c0[1], c0[2], pass == 2 ? 1.0f : c0[3] };
+                    if (pass == 2 && c0[3] == 1.0f)
                         continue;
-                    process(originalSettings(c[0], c[1], c[2], c[3]), sr, L, R, oL, oR);
+                    Settings st = originalSettings(c[0], c[1], c[2], c[3]);
+                    if (pass == 0)
+                    {
+                        st.values[kParamLink] = 1.0f;
+                        st.values[kParamMix] = c[3];
+                        st.values[kParamDry] = st.values[kParamWet] = 0.0f;   // ignored when linked
+                    }
+                    process(st, sr, L, R, oL, oR);
                     processCaps(c, static_cast<unsigned long>(sr), L, R, cL, cR);
                     const double scale = std::max(1e-3f, std::max(peakOf(cL), peakOf(cR)));
                     double err = 0.0;
                     for (size_t i = 0; i < L.size(); ++i)
                         err = std::max(err, std::max<double>(std::fabs(oL[i] - cL[i]), std::fabs(oR[i] - cR[i])) / scale);
-                    if (c[3] == 0.0f || c[3] == 1.0f)
+                    if (pass == 0 || c[3] == 0.0f || c[3] == 1.0f)
                     {
                         worst = std::max(worst, err);
                         ++cases;
@@ -244,14 +252,16 @@ int main()
                 }
         }
         char buf[160];
-        std::snprintf(buf, sizeof(buf), "%d cases wet only or dry only (7 settings, 4 rates): max error / peak %.2e",
+        std::snprintf(buf, sizeof(buf),
+                      "%d cases, linked (any blend) or wet / dry only (7 settings, 4 rates): max error / peak %.2e",
                       cases, worst);
 #ifdef __FAST_MATH__
         check(worst < 1e-5, buf);
 #else
         check(worst == 0.0, buf);
 #endif
-        std::snprintf(buf, sizeof(buf), "%d mixes, blend as dB levels: max error / peak %.2e", mixes, worstMix);
+        std::snprintf(buf, sizeof(buf), "%d mixes, unlinked, blend as dB levels: max error / peak %.2e", mixes,
+                      worstMix);
         check(worstMix < 1e-5, buf);
     }
 
@@ -673,23 +683,32 @@ int main()
     // 13. link -----------------------------------------------------------------------------------
     std::printf("13. link\n");
     {
-        const size_t at = N / 2;
-        Settings s = originalSettings(0.8f, 0.6f, 0.4f, 1.0f);
-        s.values[kParamDry] = -6.0f;
-        s.values[kParamWet] = 6.0f;    // ignored: the dry level leads when linking
+        const size_t at = N / 2, settled = at + static_cast<size_t>(0.03 * sr);
+        Settings s = originalSettings(0.8f, 0.6f, 0.4f, 0.4f);
         s.values[kParamLink] = 1.0f;
-        process(s, sr, L, R, oL, oR, { { at, kParamWet, -3.0f } });   // automation of the wet level only
-        Settings h = s;
-        h.values[kParamLink] = 0.0f;
-        h.values[kParamWet] = TinplateLaw::linkedDb(-6.0f);
-        process(h, sr, L, R, rL, rR, { { at, kParamWet, -3.0f }, { at, kParamDry, TinplateLaw::linkedDb(-3.0f) } });
+        s.values[kParamMix] = 0.4f;
+        // linked: the levels are ignored, even automated
+        process(s, sr, L, R, rL, rR);
+        Settings t = s;
+        t.values[kParamDry] = kLevelOff;
+        t.values[kParamWet] = 6.0f;
+        process(t, sr, L, R, oL, oR, { { at, kParamDry, 0.0f } });
         bool same = true;
         for (size_t i = 0; i < N; ++i)
             same = same && oL[i] == rL[i] && oR[i] == rR[i];
-        char buf[160];
-        std::snprintf(buf, sizeof(buf), "dry -6 dB leads (reverb %.2f dB), then reverb -3 dB automated (dry %.2f dB)",
-                      TinplateLaw::linkedDb(-6.0f), TinplateLaw::linkedDb(-3.0f));
-        check(same, buf);
+        check(same, "linked: dry and reverb levels ignored, even automated");
+        // automation of the mix: after the 20 ms ramp, the output of mix 0.7 from the start
+        process(s, sr, L, R, oL, oR, { { at, kParamMix, 0.7f } });
+        t = s;
+        t.values[kParamMix] = 0.7f;
+        process(t, sr, L, R, rL, rR);
+        same = true;
+        bool moved = false;
+        for (size_t i = settled; i < N; ++i)
+            same = same && oL[i] == rL[i] && oR[i] == rR[i];
+        for (size_t i = 0; i < at; ++i)
+            moved = moved || oL[i] != rL[i];
+        check(same && moved, "mix 0.4 -> 0.7 automated: then the output of mix 0.7 (blend of CAPS)");
     }
 
     // 14. size -----------------------------------------------------------------------------------

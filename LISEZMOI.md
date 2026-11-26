@@ -68,7 +68,7 @@ Différences voulues avec l'original :
 | Low cut | passe-haut à 12 dB/octave sur la réverbération seule, 20 Hz (off) à 1 kHz, bouton logarithmique |
 | High cut | (point A d'`AMELIORATIONS.md`) passe-bas à 12 dB/octave sur la réverbération seule, après Low cut, 1 kHz à 20 kHz (off), logarithmique ; même structure que Low cut (`Cut2`, RBJ en double, contourné à off) ; test 4 (8 kHz : -38 dB pour 1 kHz) |
 | Output | gain de toute la sortie, -24..+12 dB (fader depuis 1.1.0) |
-| Link | (1.1.0) icône chaîne (liée, dorée) / chaîne brisée au-dessus des faders ; paramètre `link` appliqué par le DSP (l'automation le suit) : gains dry + reverb = 1 (le Blend de l'original), le meneur ≤ 0 dB ; meneur = dernier des deux niveaux reçus par `setParameterValue` (fenêtre ou hôte), Dry quand on lie (`fLinkLeader`, `TinplateLaw::linkedDb`) ; la fenêtre affiche le même calcul et, à la souris, écrit les deux paramètres ; dans les préréglages et A/B (test 13) |
+| Link, Mix | icône chaîne (liée, dorée) / chaîne brisée au-dessus des faders. Lié (point H) : le paramètre `mix` (0-1) est le Blend de CAPS (wet = mix^1,53, dry = 1 - wet, au bit près), Dry et Reverb ignorés par le DSP ; les faders affichent les niveaux du mix (`showMix`) et, à la souris, écrivent Mix (`target`, `TinplateLaw::mixOfWetGain`, faders ≤ 0 dB). En liant : Mix tiré du fader Dry ; en déliant : Dry et Reverb écrits aux niveaux affichés (pas de saut). L'hôte voit et automatise Mix. Préréglages d'usine : Link off, Mix = leur ancien Blend. Test 13 |
 | Bypass | paramètre Bypass déclaré à l'hôte, fondu de 10 ms |
 | Duck | (1.1.0) ducking : baisse maximale de la réverbération pendant que l'entrée joue, 0-30 dB (0 = off, défaut) |
 | Threshold | seuil du ducking sur la crête de l'entrée, -60..0 dBFS (défaut -30) |
@@ -234,5 +234,9 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   l'installateur, `README.md`, le manuel. Reste : écoute du ducking et des longues queues,
   vrai hôte. Release et étiquette `v1.0.0` supprimées de GitHub le 2026-11-26
   (demande de l'utilisateur, aucun utilisateur de 1.0.0) : `v1.1.0` est la seule release.
+- **Après `v1.1.0` (session 72, non publié)** : C Size, A High cut, K banc CPU, B Depth/Rate,
+  H Mix lié ; restent D (entrée stéréo) et E (grave mono), à mettre dans un petit menu d'options
+  (accord de l'utilisateur ; réorganiser la fenêtre au besoin), puis G, I, L ; ergonomie à
+  revoir avec l'utilisateur une fois tout fait ; prochaine release : nouveau numéro.
 - Pistes non faites : réglages des préréglages à l'oreille ;
   autres pistes dans `AMELIORATIONS.md`.

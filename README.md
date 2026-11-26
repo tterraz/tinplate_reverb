@@ -22,9 +22,9 @@ measured decay-time display, presets and A/B comparison.
 - **Pre-delay** (0-250 ms, crossfaded changes), **Low cut** and **High cut** on the reverb
   (12 dB/octave),
   **Width**; faders for the **Dry** and **Reverb** levels (in place of the Blend of the
-  original) and the **Output** gain; a chain icon links Dry and Reverb so that they behave as
-  the Blend of the original (raising one lowers the other), in the DSP: host automation
-  follows it too.
+  original) and the **Output** gain; a chain icon links Dry and Reverb into one **Mix**
+  parameter, the Blend of the original to the bit (raising one fader lowers the other); the
+  host sees and automates Mix.
 - **Freeze**: infinite, lossless sustain at every frequency (modulation depth taken to zero).
 - **Ducking** (new in 1.1.0): the reverb steps back while the input plays and returns in the
   gaps (Duck depth, Threshold, Attack, Release, cut meter); at Duck 0 the output is exactly the

@@ -209,6 +209,7 @@ Rate & 0,1--5\,Hz & 1,2\,Hz & vitesse de la modulation (1,2\,Hz : l'original) \\
 Freeze & oui/non & non & réverbération tenue sans fin \\
 Dry & off--+6\dB & 0\dB & niveau du son direct \\
 Link & oui/non & non & Dry et Reverb liés comme le Blend de l'original \\
+Mix & 0--1 & 0,25 & mélange quand Link est actif (le Blend de l'original) \\
 Reverb & off--+6\dB & $-18$\dB & niveau de la réverbération seule \\
 Width & 0--200\,\% & 100\,\% & largeur stéréo de la réverbération \\
 Low cut & 20\,Hz (off)--1\,kHz & off & passe-haut 12\dB/octave sur la réverbération seule \\
@@ -285,10 +286,12 @@ $-18{,}4$\dB{} et Dry $-1{,}1$\dB.
 le Blend de l'original, monter l'un fait descendre l'autre, la somme de leurs gains restant 1
 (Dry 0\dB{} : Reverb off ; Dry $-6$\dB{} : Reverb $-6$\dB ; Dry off : Reverb 0\dB). Liés,
 ils ne montent pas au-dessus de 0\dB. Au moment de lier, c'est Dry qui fixe le mélange : Reverb
-prend la valeur qui complète Dry. Un second clic les délie. Le lien est un réglage (Link),
-appliqué par le calcul lui-même : l'automation de l'hôte le suit aussi, le dernier des deux
-faders déplacé (à la souris ou par l'automation) fixant l'autre. Il fait partie des préréglages
-et des jeux A/B.
+prend la valeur qui complète Dry. Un second clic les délie : les faders gardent les niveaux
+qu'ils montraient, sans saut. Liés, les deux faders ne sont plus que l'affichage d'un seul
+réglage, \textbf{Mix} (0 à 1), qui est exactement le Blend de l'original : réverbération
+$\mathrm{mix}^{1{,}53}$, sec $1 - \mathrm{mix}^{1{,}53}$, au bit près. C'est Mix que l'hôte voit
+et automatise ; les réglages Dry et Reverb sont alors ignorés, même automatisés. Link et Mix
+font partie des préréglages et des jeux A/B.
 
 \paragraph{Width.} Largeur stéréo de la réverbération seule : 0\,\% la rend mono, 100\,\% la
 laisse telle quelle, 200\,\% double la différence entre les canaux. Le sec n'est pas touché.
@@ -690,12 +693,13 @@ en simple précision, certains produits et sommes en double). Avec Pre-delay 0, 
 cut off,
 Width 100\,\%, Output 0\dB, Size et Depth 100\,\%, Rate 1,2\,Hz, Duck 0, Clear et Freeze inactifs, pour n'importe
 quelles valeurs de Bandwidth, Damping et Tail (jusqu'à 1), la sortie est \textbf{celle de l'original au bit
-près} en réverbération seule (Reverb 0\dB, Dry off : Blend 1 de l'original) et en son direct
-seul (Dry 0\dB, Reverb off : Blend 0), réglages fixes. Pour un mélange, les gains des faders,
-calculés depuis des dB, ne retombent pas exactement sur $\mathrm{blend}^{1{,}53}$ : l'écart est
-celui de l'arrondi ($1{,}3\times10^{-7}$ de la crête au plus sur 20 mélanges). C'est vérifié à
-chaque compilation contre le code source de CAPS lui-même, appelé comme le ferait un hôte
-LADSPA : 32 cas au bit près et 20 mélanges (7 réglages à 44,1, 48, 96 et 192\,kHz, blocs de
+près} avec Link actif et Mix égal au Blend de l'original, pour tout dosage, réglages fixes ; de
+même, sans Link, en réverbération seule (Reverb 0\dB, Dry off) et en son direct seul (Dry
+0\dB, Reverb off). Sans Link, pour un mélange, les gains des faders, calculés depuis des dB, ne
+retombent pas exactement sur $\mathrm{blend}^{1{,}53}$ : l'écart est celui de l'arrondi
+($1{,}3\times10^{-7}$ de la crête au plus sur 20 mélanges). C'est vérifié à chaque compilation
+contre le code source de CAPS lui-même, appelé comme le ferait un hôte LADSPA : 60 cas au bit
+près et 20 mélanges (7 réglages à 44,1, 48, 96 et 192\,kHz, blocs de
 tailles variées), en calcul strict comme avec les options d'optimisation du greffon.
 
 Quand un réglage bouge, la sortie diffère de l'original par le seul lissage
@@ -750,7 +754,7 @@ en sortie.
   \item Linux : \verb|$XDG_CONFIG_HOME/tinplate/|, à défaut \verb|~/.config/tinplate/|.
   \end{itemize}
 \item[Format d'un préréglage.] Texte, une ligne \texttt{clé=valeur} par réglage
-  (\texttt{bandwidth}, \texttt{tail}, \texttt{damping}, \texttt{size}, \texttt{wet}, \texttt{dry}, \texttt{link}, \texttt{predelay},
+  (\texttt{bandwidth}, \texttt{tail}, \texttt{damping}, \texttt{size}, \texttt{wet}, \texttt{dry}, \texttt{link}, \texttt{mix}, \texttt{predelay},
   \texttt{lowcut}, \texttt{width}, \texttt{output}, \texttt{duck}, \texttt{threshold},
   \texttt{attack}, \texttt{release}, \texttt{clear}, \texttt{floor}, \texttt{trigger},
   \texttt{fade}, \texttt{window}), nombres avec un point décimal quelle que

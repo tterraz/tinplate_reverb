@@ -17,8 +17,8 @@
  *     -> low cut -> high cut -> width -> x ducking gain -> wet;
  *   out = wet x wet level + dry x dry level -> output gain -> bypass crossfade
  *   (levels in dB, -60 = off; CAPS has a blend instead: wet level blend^1.53, dry 1 - that;
- *   Link: the level changed last, by the interface or the host, sets the other one so that
- *   the gains add up to 1, as the blend; when linking, the dry level leads)
+ *   Link: the parameter Mix sets both, as the blend of CAPS (wet mix^1.53, dry 1 - wet), the
+ *   levels are then ignored; the interface shows the faders at the levels of the mix)
  *
  * With pre-delay 0, low and high cut off, size and width 100 %, output 0 dB, freeze, ducking and
  * clear off, and
@@ -264,6 +264,7 @@ protected:
             set(p, "Dry / reverb link", "link", "");
             p.hints |= kParameterIsBoolean | kParameterIsInteger;
             break;
+        case kParamMix:       set(p, "Mix (linked)", "mix", ""); break;
         case kParamPredelay:  set(p, "Pre-delay", "predelay", "ms"); break;
         case kParamLowCut:
             set(p, "Low cut", "lowcut", "Hz");
@@ -358,7 +359,6 @@ protected:
             return;
         for (int i = 0; i < kPresetParamCount; ++i)
             fParams[i] = kTinplatePresets[index].values[i];
-        fLinkLeader = kParamDry;
     }
 
     float getParameterValue(const uint32_t index) const override
@@ -370,11 +370,6 @@ protected:
     {
         if (index >= static_cast<uint32_t>(kParamFirstOutput))
             return;
-        // link: the dry or wet level changed last leads; when linking, the dry one
-        if (index == kParamDry || index == kParamWet)
-            fLinkLeader = static_cast<int>(index);
-        else if (index == kParamLink && value > 0.5f && fParams[kParamLink] <= 0.5f)
-            fLinkLeader = kParamDry;
         fParams[index] = value;
     }
 
@@ -550,23 +545,18 @@ private:
         const double rate = fParams[kParamModRate] == 1.2f ? 1.2 : static_cast<double>(fParams[kParamModRate]);
         for (PlateCore::Plate& p : fPlate)
             p.setModRate(rate);
-        float wetDb = fParams[kParamWet], dryDb = fParams[kParamDry];
         if (fParams[kParamLink] > 0.5f)
         {
-            // linked as the blend of CAPS: the leader (at most 0 dB) sets the other
-            if (fLinkLeader == kParamWet)
-            {
-                wetDb = std::fmin(wetDb, 0.0f);
-                dryDb = TinplateLaw::linkedDb(wetDb);
-            }
-            else
-            {
-                dryDb = std::fmin(dryDb, 0.0f);
-                wetDb = TinplateLaw::linkedDb(dryDb);
-            }
+            // linked: the mix, as the blend of CAPS (same gains, to the bit)
+            const float wet = TinplateLaw::wet(fParams[kParamMix]);
+            fWet.set(wet, n);
+            fDry.set(1 - wet, n);
         }
-        fWet.set(TinplateLaw::levelGain(wetDb), n);
-        fDry.set(TinplateLaw::levelGain(dryDb), n);
+        else
+        {
+            fWet.set(TinplateLaw::levelGain(fParams[kParamWet]), n);
+            fDry.set(TinplateLaw::levelGain(fParams[kParamDry]), n);
+        }
         fWidth.set(fParams[kParamWidth] * 0.01f, n);
         fGain.set(fParams[kParamOutput] == 0.0f ? 1.0f : dbToGain(fParams[kParamOutput]), n);
         fBypass.set(fParams[kParamBypass] > 0.5f ? 1.0f : 0.0f, ramp ? static_cast<int>(0.01 * sr) : 0);
@@ -716,7 +706,6 @@ private:
     float fMeterIn = 0.0f, fMeterWet = 0.0f, fMeterOut = 0.0f;
     float fDuckDepth = 0.0f, fDuckThresholdDb = 0.0f, fDuckThreshold = 1.0f, fDuckDb = 0.0f;
     float fDuckAttack = 0.0f, fDuckRelease = 0.0f;   // one-pole coefficients
-    int fLinkLeader = kParamDry;   // link: dry or wet level changed last
     bool fClearOn = false, fArmed = false;
     int fCur = 0, fFadeLeft = 0, fFadeLength = 1, fFlash = 0, fFlashLength = 1, fRise = 0, fRiseMax = 1;
     float fFloor = 0.0f, fTrigger = 1.0f, fEnv = 0.0f, fEnvRelease = 0.0f;

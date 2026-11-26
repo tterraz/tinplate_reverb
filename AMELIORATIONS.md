@@ -18,9 +18,8 @@ demandera un nouveau numéro de version. Détails de l'existant : `LISEZMOI.md`.
 - **G. Pre-delay calé sur le tempo** de l'hôte (1/64 à 1/4, pointé, triolet), en option.
 
 ## Interface et hôte
-- **H. Réglage Mix quand Link est actif** : un paramètre unique (comme le Blend de l'original)
-  que l'hôte automatise et affiche juste ; aujourd'hui, avec Link, l'hôte ne voit pas changer la
-  valeur du fader calculé (limite des formats).
+- **H. Réglage Mix quand Link est actif** : **fait** (Mix = Blend de CAPS au bit près ; les faders
+  en sont l'affichage ; l'hôte automatise Mix).
 - **I. Historique** (comme Brimstone) : niveau d'entrée, baisse du ducking et vidages de Clear
   sur quelques secondes, pour régler Threshold, Floor et Trigger à l'œil.
 - **J. Préréglages** utilisant Clear et Link (piano, guitare, caisse claire), et réglage de tous
