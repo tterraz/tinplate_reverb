@@ -311,13 +311,17 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   demande un nouveau numéro.
   Releases `v1.1.0` et `v1.2.0` supprimées de GitHub le 2026-11-27 (demande de l'utilisateur) ;
   leurs étiquettes, supprimées avec elles, remises à l'identique : `v1.3.0` est la seule release.
-- **1.4.0 (session 78, 2026-11-27)** : R Smooth (demande de l'utilisateur :
+- **1.4.0 (session 78, 2026-11-27, release GitHub `v1.4.0` publiée, notes `build/release/notes-1.4.0.md` ; commit `0a7f821`)** : R Smooth (demande de l'utilisateur :
   « vaguelettes de volume » en fin de queue). Version 1.4.0 dans `getVersion`, l'installateur,
   `README.md`, les deux manuels (20 pages, figure `fig_smooth`). Vérifié : `build.sh` sans
   avertissement, tests DSP 91/91 (strict et `-ffast-math` ; test 1 : Smooth 0 = CAPS au bit),
   validateur VST3 47/47 Linux et Windows, interface vue (capture, deux thèmes). Mesures : outil
   `tools/ripple.cpp` (`ripple_measure.hpp`). Captures 1.4.0 : Slate = préréglage 12 (Two plates),
   sans bulle ; Tin = préréglage 12, `_CLEAR`, `_OPTIONS`, `_SYNC`, bulle 28 (Smooth). Zone de
-  démonstration : knob 28 Smooth. Le premier
+  démonstration : knob 28 Smooth. Installateur `/S` sous Wine (VST3, CLAP, deux manuels
+  identiques, deux raccourcis, puis tout retiré). Release `v1.3.0` supprimée de GitHub (règle :
+  une seule release par greffon), étiquette gardée : `v1.4.0` est la seule release. Restent :
+  écoute (Smooth, réglage à l'oreille de 0,5), vrai hôte ; tout changement livré demande un
+  nouveau numéro. Le premier
   `build.sh` de la session a réécrit `bin/Tinplate-Reverb-1.3.0-setup.exe` (piège connu ; la
   release est dans `build/release/`).
