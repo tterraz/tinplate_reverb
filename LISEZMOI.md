@@ -305,3 +305,5 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   identique, CLAP, deux manuels identiques, raccourcis, puis tout retiré). Restent : écoute (Two
   plates, défauts de la plaque B), tirage RANDOM au clic, vrai hôte ; tout changement livré
   demande un nouveau numéro.
+  Releases `v1.1.0` et `v1.2.0` supprimées de GitHub le 2026-11-27 (demande de l'utilisateur) ;
+  leurs étiquettes, supprimées avec elles, remises à l'identique : `v1.3.0` est la seule release.
