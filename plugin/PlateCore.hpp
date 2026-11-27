@@ -339,9 +339,13 @@ public:
             tank.lattice[i].reset();
             tank.damping[i].reset();
         }
-        tank.mlattice[0].lfo.setF(fRate, fFs, 0);
-        tank.mlattice[1].lfo.setF(fRate, fFs, .5 * M_PI);
+        tank.mlattice[0].lfo.setF(fRate, fFs, fPhase);
+        tank.mlattice[1].lfo.setF(fRate, fFs, fPhase + .5 * M_PI);
     }
+
+    // phase of the modulation at activate(), radians (0: the original); a second plate in
+    // parallel starts elsewhere, so that two plates with the same settings are not identical
+    void setPhase(const double phase) { fPhase = phase; }
 
     // rate of the modulation, Hz (the original: 1.2), changed without a jump of phase
     void setModRate(const double hz)
@@ -515,6 +519,7 @@ private:
     float fFs = 44100.0f;
     float fModWidth = 0.0f;
     double fRate = 1.2;
+    double fPhase = 0.0;
     float fSize = 1.0f;
     float fBase[kLengths] = {}, fLen[kLengths] = {}, fTarget[kLengths] = {}, fStep[kLengths] = {};
     int fGlideLeft = 0;

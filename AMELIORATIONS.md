@@ -45,3 +45,17 @@ demandera un nouveau numéro de version. Détails de l'existant : `LISEZMOI.md`.
   `manuel.pdf` ; figures `fig_*_en.pdf` par `figures.py` ; les deux dans l'installateur).
 - **M. Validation** : validateur CLAP abandonné (décision de l'utilisateur, 2026-11-26) ; reste
   l'essai dans un vrai logiciel audio sous Windows et Linux (par l'utilisateur).
+
+## Après 1.2.0 (session 76, 2026-11-27, non publié)
+- **N. Deuxième plaque en parallèle** : **faite** (demande de l'utilisateur ; choix : plaque 2 à
+  Bandwidth, Tail, Damping, Size propres, modulation, gel et Clear partagés ; bouton Split à
+  puissance constante, plaque 1 × cos, plaque 2 × sin de Split × 90°). Split 0 (défaut) : sortie
+  au bit près celle d'avant (tests inchangés, identité avec CAPS) ; plaque sans entrée calculée
+  jusqu'à ce que sa queue reste 50 ms sous -120 dBFS, puis vidée et arrêtée. Préréglage « Two
+  plates ». Test 20 ; banc : cas « two » (Split 50 %) 145 ns par trame contre 79 pour « music »
+  (× 1,8) ; Split 0 : +5 à 7 % sur la référence 1.2.0 mesurée en même temps (structure à deux
+  plaques ; ni la multiplication par l'envoi ni le compteur de silence n'en sont la cause).
+  Détail : `LISEZMOI.md` (Réglages, Interface).
+- **O. Cadres 1 à 3 plus hauts, vu-mètres agrandis** : **fait** (demande de l'utilisateur) :
+  fenêtre 900 × 918 (sections du haut 440 de haut au lieu de 380), vu-mètres 164 × 15 (au lieu
+  de 132 × 9) avec une échelle dBFS dessous.

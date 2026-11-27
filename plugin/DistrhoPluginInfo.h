@@ -27,7 +27,7 @@
 #define DISTRHO_UI_USE_NANOVG        1
 #define DISTRHO_UI_USER_RESIZABLE    1
 #define DISTRHO_UI_DEFAULT_WIDTH     900
-#define DISTRHO_UI_DEFAULT_HEIGHT    858
+#define DISTRHO_UI_DEFAULT_HEIGHT    918
 
 #define DISTRHO_PLUGIN_VST3_CATEGORIES "Fx|Reverb"
 #define DISTRHO_PLUGIN_CLAP_FEATURES   "audio-effect", "reverb", "stereo"

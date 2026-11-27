@@ -4,17 +4,18 @@
  * Copyright (C) 2026 Tinplate authors
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Everything is drawn in a logical 900 x 858 space, scaled to the window size (resizable,
+ * Everything is drawn in a logical 900 x 918 space, scaled to the window size (resizable,
  * aspect ratio kept).  Three sections, left to right in the order of the signal:
- *   1 INPUT (pre-delay, free or locked to the tempo: SYNC; bandwidth) -> 2 PLATE (tail, damping,
- *   size, modulation, freeze, decay time) -> 3 OUTPUT (width, low and high cut; faders DRY,
- *   REVERB, OUTPUT; meters),
+ *   1 INPUT (pre-delay, free or locked to the tempo: SYNC; split between the two plates) ->
+ *   2 PLATE (one row per plate: bandwidth, tail, damping, size; then the shared modulation and the
+ *   decay times) -> 3 OUTPUT (width, low and high cut; faders DRY, REVERB, OUTPUT; meters),
  * below them 4 DUCKING (duck, threshold, attack, release, cut meter) and 5 CLEAR (on / off,
  * floor, trigger, fade, state), then 6 HISTORY (input and reverb peaks, cut of the ducking,
  * clearings, with the thresholds, over the last 3, 7 or 30 s),
- * and at the bottom the decay time (RT60) of the plate against frequency with the tone of the wet
- * signal (bandwidth, low and high cut).
- * FREEZE in the header; STEREO (input) by Bandwidth; MONO BASS with the width in OUTPUT.
+ * and at the bottom the decay time (RT60) of each plate in use against frequency with the tone of
+ * the wet signal (bandwidths weighted by the split, low and high cut).
+ * FREEZE in the header; STEREO (input) by Split; MONO BASS with the width in OUTPUT.  The row of
+ * a plate that gets no input (Split at 0 or 100 %) is dimmed.
  * Knobs: drag vertically (Shift = fine), mouse wheel, double-click or Ctrl+click = default,
  * right-click = type a value (Enter / Escape).  Every control has a tooltip.
  * A / B: two sets of settings to compare (header: A | B, copy to the other); the inactive one is
@@ -47,7 +48,7 @@ START_NAMESPACE_DISTRHO
 using DGL_NAMESPACE::Color;
 
 static const float kW = 900.0f;
-static const float kH = 858.0f;
+static const float kH = 918.0f;
 static const float kPi = 3.14159265358979f;
 static const float kArcStart = 0.75f * kPi;
 static const float kArcSweep = 1.5f * kPi;
@@ -138,22 +139,27 @@ struct Rect {
 };
 
 // sections
-static const Rect kSecIn   = { 20, 70, 220, 380 };
-static const Rect kSecTank = { 250, 70, 330, 380 };
-static const Rect kSecOut  = { 590, 70, 290, 380 };
-static const Rect kSecDuck = { 20, 460, 425, 122 };
-static const Rect kSecClear = { 455, 460, 425, 122 };   // mirror of 4 DUCKING
-static const Rect kHistory = { 20, 592, 860, 118 };
-static const Rect kHistPlot = { 150, 602, 680, 90 };   // history: dBFS against time
-static const Rect kHistLengthBox = { 30, 688, 92, 14 }; // history length, under the legend
-static const Rect kDecay   = { 20, 720, 860, 128 };
-static const Rect kPlot    = { 150, 728, 680, 104 };   // decay time against frequency
+static const Rect kSecIn   = { 20, 70, 220, 440 };
+static const Rect kSecTank = { 250, 70, 330, 440 };
+static const Rect kSecOut  = { 590, 70, 290, 440 };
+static const Rect kSecDuck = { 20, 520, 425, 122 };
+static const Rect kSecClear = { 455, 520, 425, 122 };   // mirror of 4 DUCKING
+static const Rect kHistory = { 20, 652, 860, 118 };
+static const Rect kHistPlot = { 150, 662, 680, 90 };   // history: dBFS against time
+static const Rect kHistLengthBox = { 30, 748, 92, 14 }; // history length, under the legend
+static const Rect kDecay   = { 20, 780, 860, 128 };
+static const Rect kPlot    = { 150, 788, 680, 104 };   // decay time against frequency
 
 // knobs and faders (a fader: cx, cy = centre of its track, r = half its length)
 enum { kKnobPredelay = 0, kKnobBandwidth, kKnobTail, kKnobDamping, kKnobWet, kKnobWidth, kKnobLowCut,
        kKnobOutput, kKnobDuck, kKnobThreshold, kKnobAttack, kKnobRelease, kKnobFloor, kKnobTrigger, kKnobFade,
        kKnobWindow, kKnobDry, kKnobSize, kKnobHighCut, kKnobModDepth, kKnobModRate, kKnobNote, kKnobMonoBass,
-       kNumKnobs };
+       kKnobSplit, kKnobBandwidth2, kKnobTail2, kKnobDamping2, kKnobSize2, kNumKnobs };
+
+// PLATE: one row per plate (bandwidth, tail, damping, size), then the shared modulation
+static constexpr float kGridX[4] = { 316.0f, 389.0f, 462.0f, 535.0f };
+static constexpr float kGridY[3] = { 140.0f, 248.0f, 382.0f };
+static constexpr float kGridR = 22.0f;
 
 struct KnobDef {
     int param;
@@ -163,18 +169,18 @@ struct KnobDef {
 };
 
 static constexpr KnobDef kKnobs[kNumKnobs] = {
-    { kParamPredelay,  130.0f, 162.0f, 44.0f, "PRE-DELAY",
+    { kParamPredelay,  130.0f, 178.0f, 44.0f, "PRE-DELAY",
       "Delay before the plate: separates the reverb from the direct sound (clearer vocals). "
       "A change crossfades in 30 ms." },
-    { kParamBandwidth, 130.0f, 324.0f, 44.0f, "BANDWIDTH",
-      "Low-pass at the input of the plate (control of the original). Low: darker, softer onset. "
-      "Shown: its -3 dB frequency at this sample rate." },
-    { kParamTail,      305.0f, 145.0f, 32.0f, "TAIL",
-      "Length of the reverb: gain of the loop of the plate (control of the original, 0 to 1; "
+    { kParamBandwidth, kGridX[0], kGridY[0], kGridR, "BANDWIDTH",
+      "Plate 1: low-pass at the input of the plate (control of the original). Low: darker, softer "
+      "onset. Shown: its -3 dB frequency at this sample rate." },
+    { kParamTail,      kGridX[1], kGridY[0], kGridR, "TAIL",
+      "Plate 1: length of the reverb, gain of the loop of the plate (control of the original, 0 to 1; "
       "same law up to 1.16: 10 s at 500 Hz). Shown: the decay time at 500 Hz, measured on the plate." },
-    { kParamDamping,   415.0f, 145.0f, 32.0f, "DAMPING",
-      "Low-pass inside the loop (control of the original): the highs die sooner than the lows. "
-      "Shown: its -3 dB frequency at this sample rate." },
+    { kParamDamping,   kGridX[2], kGridY[0], kGridR, "DAMPING",
+      "Plate 1: low-pass inside the loop (control of the original): the highs die sooner than the "
+      "lows. Shown: its -3 dB frequency at this sample rate." },
     { kParamWet,       810.0f, 215.0f, 95.0f, "REVERB",
       "Level of the reverb alone, dB (at the bottom: off). Reverb at 0 dB and Dry off: reverb only "
       "(for a send)." },
@@ -185,49 +191,62 @@ static constexpr KnobDef kKnobs[kNumKnobs] = {
       "At the minimum: off." },
     { kParamOutput,    856.0f, 215.0f, 95.0f, "OUTPUT",
       "Gain of the whole output, dry and wet." },
-    { kParamDuck,       73.0f, 520.0f, 22.0f, "DUCK",
+    { kParamDuck,       73.0f, 580.0f, 22.0f, "DUCK",
       "Ducking: the reverb is lowered while the input plays and comes back in the gaps "
       "(clearer vocals). Largest cut of the reverb, dB. At 0: off." },
-    { kParamThreshold, 179.0f, 520.0f, 22.0f, "THRESHOLD",
+    { kParamThreshold, 179.0f, 580.0f, 22.0f, "THRESHOLD",
       "Input peak level where the ducking starts: the reverb is cut by as many dB as the input "
       "goes over it, at most the Duck depth." },
-    { kParamAttack,    286.0f, 520.0f, 22.0f, "ATTACK",
+    { kParamAttack,    286.0f, 580.0f, 22.0f, "ATTACK",
       "How fast the reverb goes down when the input comes in." },
-    { kParamRelease,   392.0f, 520.0f, 22.0f, "RELEASE",
+    { kParamRelease,   392.0f, 580.0f, 22.0f, "RELEASE",
       "How fast the reverb comes back when the input stops: short, it swells in every gap; "
       "long, it comes back at the end of the phrase." },
-    { kParamFloor,     508.0f, 520.0f, 22.0f, "FLOOR",
+    { kParamFloor,     508.0f, 580.0f, 22.0f, "FLOOR",
       "Clear: the detection is armed while the input stays under this peak level (and the "
       "previous clearing has ended)." },
-    { kParamTrigger,   614.0f, 520.0f, 22.0f, "TRIGGER",
+    { kParamTrigger,   614.0f, 580.0f, 22.0f, "TRIGGER",
       "Clear: an armed input that goes over this level within the Window is a new attack, and "
       "empties the plate." },
-    { kParamFade,      721.0f, 520.0f, 22.0f, "FADE",
+    { kParamFade,      721.0f, 580.0f, 22.0f, "FADE",
       "Clear: how fast the old reverb fades out at a new attack (the new sound goes into an "
       "empty plate at once)." },
-    { kParamWindow,    827.0f, 520.0f, 22.0f, "WINDOW",
+    { kParamWindow,    827.0f, 580.0f, 22.0f, "WINDOW",
       "Clear: longest time for the input to go from Floor to Trigger to count as an attack. "
       "Short: only sharp attacks (drums, plucks); long: softer ones too." },
     { kParamDry,       762.0f, 215.0f, 95.0f, "DRY",
       "Level of the dry signal, dB (at the bottom: off). Not delayed: no latency." },
-    { kParamSize,      525.0f, 145.0f, 32.0f, "SIZE",
-      "Size of the plate: lengths of its delays, 50 to 200 % (100 %: the original). Larger: deeper, "
-      "denser and longer (the decay grows with the size). A change glides in 100 ms (brief pitch glide)." },
+    { kParamSize,      kGridX[3], kGridY[0], kGridR, "SIZE",
+      "Plate 1: lengths of its delays, 50 to 200 % (100 %: the original). Larger: deeper, denser and "
+      "longer (the decay grows with the size). A change glides in 100 ms (brief pitch glide)." },
     { kParamHighCut,   696.0f, 245.0f, 18.0f, "HIGH CUT",
       "Low-pass on the reverb only (12 dB / octave): a darker tail, the attack and the dry sound "
       "untouched. At the maximum: off." },
-    { kParamModDepth,  360.0f, 270.0f, 32.0f, "DEPTH",
-      "Depth of the modulation of the plate (slow chorus of the tail), 0 to 200 %. 100 %: the "
-      "original. 0: still plate, no loss of highs." },
-    { kParamModRate,   470.0f, 270.0f, 32.0f, "RATE",
-      "Rate of the modulation of the plate, 0.1 to 5 Hz. 1.2 Hz: the original. A change keeps the "
+    { kParamModDepth,  kGridX[0], kGridY[2], kGridR, "DEPTH",
+      "Depth of the modulation of both plates (slow chorus of the tail), 0 to 200 %. 100 %: the "
+      "original. 0: still plates, no loss of highs." },
+    { kParamModRate,   kGridX[1], kGridY[2], kGridR, "RATE",
+      "Rate of the modulation of both plates, 0.1 to 5 Hz. 1.2 Hz: the original. A change keeps the "
       "phase (no click)." },
-    { kParamNote,      130.0f, 162.0f, 44.0f, "PRE-DELAY",
+    { kParamNote,      130.0f, 178.0f, 44.0f, "PRE-DELAY",
       "Pre-delay locked to the tempo of the host (SYNC on): a note value, 1/64 to 1/4, dotted (D) or "
       "triplet (T); 120 BPM when the host gives no tempo, at most 2 s. A change of tempo crossfades." },
     { kParamMonoBass,  696.0f, 135.0f, 18.0f, "MONO BASS",
       "The reverb is mono below this frequency (its side signal high-passed, 12 dB / octave): a "
       "steadier low end, safe in mono. At the minimum: off." },
+    { kParamSplit,     130.0f, 382.0f, 44.0f, "SPLIT",
+      "Share of the input sent to each plate, at constant power (plate 1 gets cos, plate 2 sin of "
+      "Split x 90 degrees: the level of the reverb stays about the same). 0 %: plate 1 only, the "
+      "original; 100 %: plate 2 only. A plate without input rings out, then stops computing." },
+    { kParamBandwidth2, kGridX[0], kGridY[1], kGridR, "BANDWIDTH",
+      "Plate 2: low-pass at its input, as for plate 1. Shown: its -3 dB frequency." },
+    { kParamTail2,     kGridX[1], kGridY[1], kGridR, "TAIL",
+      "Plate 2: length of the reverb, as for plate 1. Shown: the decay time of plate 2 at 500 Hz." },
+    { kParamDamping2,  kGridX[2], kGridY[1], kGridR, "DAMPING",
+      "Plate 2: low-pass inside its loop, as for plate 1. Shown: its -3 dB frequency." },
+    { kParamSize2,     kGridX[3], kGridY[1], kGridR, "SIZE",
+      "Plate 2: lengths of its delays, 50 to 200 %. A plate 2 of another size than plate 1 makes the "
+      "two tails differ (a denser, less metallic sum)." },
 };
 
 // kKnobs follows the order of the enum above
@@ -242,16 +261,18 @@ static_assert(kKnobs[kKnobPredelay].param == kParamPredelay && kKnobs[kKnobBandw
               && kKnobs[kKnobDry].param == kParamDry && kKnobs[kKnobSize].param == kParamSize
               && kKnobs[kKnobHighCut].param == kParamHighCut && kKnobs[kKnobModDepth].param == kParamModDepth
               && kKnobs[kKnobModRate].param == kParamModRate && kKnobs[kKnobNote].param == kParamNote
-              && kKnobs[kKnobMonoBass].param == kParamMonoBass,
+              && kKnobs[kKnobMonoBass].param == kParamMonoBass && kKnobs[kKnobSplit].param == kParamSplit
+              && kKnobs[kKnobBandwidth2].param == kParamBandwidth2 && kKnobs[kKnobTail2].param == kParamTail2
+              && kKnobs[kKnobDamping2].param == kParamDamping2 && kKnobs[kKnobSize2].param == kParamSize2,
               "kKnobs: one entry per knob, in the order of the enum");
 
 static const Rect kFreeze  = { 702, 17, 72, 24 };     // header, by Bypass
-static const Rect kRt      = { 265, 372, 300, 72 };    // decay time readout
+static const Rect kRt      = { 432, 342, 140, 100 };   // decay times of the two plates, by the modulation
 static const Rect kPreset  = { 344, 16, 176, 26 };     // drop-down box; the list opens below it
 static const Rect kAB      = { 528, 17, 48, 24 };      // A | B
 static const Rect kCopy    = { 580, 17, 34, 24 };      // copy the current set to the other
-static const Rect kSync    = { 186, 200, 46, 18 };     // pre-delay locked to the tempo
-static const Rect kStereoBtn = { 186, 362, 46, 18 };   // stereo input, by Bandwidth as SYNC by Pre-delay
+static const Rect kSync    = { 186, 216, 46, 18 };     // pre-delay locked to the tempo
+static const Rect kStereoBtn = { 186, 388, 46, 18 };   // stereo input, by Split as SYNC by Pre-delay
 static const float kMenuItemH = 22.0f;     // preset list: item
 static const float kMenuHeaderH = 20.0f;   // section title (FACTORY, USER)
 static const float kMenuDividerH = 9.0f;   // line before "Save current settings..."
@@ -268,12 +289,12 @@ static const Rect kTheme   = { 622, 17, 72, 24 };
 static const Rect kBypass  = { 782, 14, 98, 30 };
 
 // meters: three horizontal bars in the output section
-static const float kMeterX = 690.0f, kMeterW = 132.0f, kMeterH = 9.0f;
-static const float kMeterY[3] = { 384.0f, 404.0f, 424.0f };   // IN, REVERB, OUT
-static const Rect kDuckMeter = { 272, 473, 110, 8 };             // cut of the reverb by the ducking
-static const Rect kClearBtn  = { 707, 468, 44, 18 };              // clear on / off (place of the CUT meter)
+static const float kMeterX = 662.0f, kMeterW = 164.0f, kMeterH = 15.0f;
+static const float kMeterY[3] = { 396.0f, 428.0f, 460.0f };   // IN, REVERB, OUT; dBFS scale under them
+static const Rect kDuckMeter = { 272, 533, 110, 8 };             // cut of the reverb by the ducking
+static const Rect kClearBtn  = { 707, 528, 44, 18 };              // clear on / off (place of the CUT meter)
 static const Rect kLink      = { 775, 92, 22, 18 };               // chain: dry and reverb faders linked
-static const Rect kClearState = { 757, 468, 80, 18 };             // off, waiting, armed, cleared
+static const Rect kClearState = { 757, 528, 80, 18 };             // off, waiting, armed, cleared
 
 // hover zones with a tooltip (knobs are handled separately)
 enum {
@@ -293,11 +314,12 @@ static const Zone kZones[kNumZones] = {
       "Holds the reverb forever: the input of the plate closes and the loop stops losing energy "
       "(no damping, no modulation). Play over the frozen sound; the dry signal still passes." },
     { kRt, "DECAY TIME",
-      "Time for the reverb to fall by 60 dB (RT60), measured on the impulse response of the plate "
-      "(table interpolated, within about 10 %)." },
+      "Time for the reverb of each plate to fall by 60 dB (RT60) at 500 Hz, measured on the impulse "
+      "response of the plate (table interpolated, within about 10 %). Dimmed: a plate without input." },
     { kPlot, "DECAY TIME AND TONE",
-      "Brass: decay time (RT60, left scale, seconds) against frequency, set by Tail and Damping. "
-      "Steel, dashed: tone of the reverb (right scale, dB), set by Bandwidth, Low cut and High cut." },
+      "Brass: decay time (RT60, left scale, seconds) against frequency of each plate with input, set "
+      "by its Tail, Damping and Size (plate 2: thinner). Steel, dashed: tone of the reverb (right "
+      "scale, dB), set by the Bandwidths weighted by the Split, Low cut and High cut." },
     { kPreset, "PRESETS",
       "Click to choose a preset: factory presets, then yours (saved for all projects on this "
       "computer). Wheel: next / previous. A * means a setting was changed since it was loaded." },
@@ -310,11 +332,11 @@ static const Zone kZones[kNumZones] = {
       "Two sets of settings to compare: click A or B to switch. Both are saved with the project." },
     { kCopy, "COPY",
       "Copies the current settings into the other set (A > B or B > A)." },
-    { { kMeterX - 46, kMeterY[0] - 7, kMeterW + 100, 16 }, "IN", "Input peak level, dBFS." },
-    { { kMeterX - 46, kMeterY[1] - 7, kMeterW + 100, 16 }, "REVERB",
+    { { kMeterX - 56, kMeterY[0] - 10, kMeterW + 100, 20 }, "IN", "Input peak level, dBFS." },
+    { { kMeterX - 56, kMeterY[1] - 10, kMeterW + 100, 20 }, "REVERB",
       "Peak level of the reverb alone (after low cut, width and ducking, before the Reverb fader), "
       "dBFS." },
-    { { kMeterX - 46, kMeterY[2] - 7, kMeterW + 100, 16 }, "OUT", "Output peak level, dBFS." },
+    { { kMeterX - 56, kMeterY[2] - 10, kMeterW + 100, 20 }, "OUT", "Output peak level, dBFS." },
     { { kDuckMeter.x - 36, kDuckMeter.y - 7, kDuckMeter.w + 76, 22 }, "CUT",
       "Cut of the reverb by the ducking now, dB (0 to 30)." },
     { kClearBtn, "CLEAR",
@@ -329,8 +351,8 @@ static const Zone kZones[kNumZones] = {
       "other (their gains add up to 1, both at most 0 dB). When linking, the Dry fader sets the "
       "mix. Linked, both show one parameter, Mix, which the host automates." },
     { kStereoBtn, "STEREO INPUT",
-      "Off (the original): the plate takes the mono sum of L and R. On: each channel feeds its own "
-      "half of the plate, the onset of the reverb follows the panning (the tail ends near the centre). "
+      "Off (the original): the plates take the mono sum of L and R. On: each channel feeds its own "
+      "half of each plate, the onset of the reverb follows the panning (the tail ends near the centre). "
       "A centred sound gives the same reverb either way." },
     { kSync, "SYNC",
       "Locks the pre-delay to the tempo of the host: the knob then sets a note value (1/64 to 1/4, "
@@ -1363,25 +1385,45 @@ private:
     {
         const float v = fValues[p];
         const char* fmt = "%.1f";
-        if (p <= kParamDamping)
+        if (p <= kParamDamping || p == kParamBandwidth2 || p == kParamTail2 || p == kParamDamping2)
             fmt = "%.3f";
         else if (p == kParamModRate)
             fmt = "%.2f";
         else if (p == kParamPredelay || p == kParamLowCut || p == kParamHighCut || p == kParamWidth || p == kParamSize || p == kParamModDepth
                  || p == kParamThreshold
                  || p == kParamRelease || p == kParamFloor || p == kParamTrigger || p == kParamFade
-                 || p == kParamWindow || p == kParamMonoBass)
+                 || p == kParamWindow || p == kParamMonoBass || p == kParamSplit || p == kParamSize2)
             fmt = "%.0f";
         std::snprintf(buf, size, fmt, v);
     }
 
-    // decay time at 500 Hz, s (infinite when frozen)
-    double decaySeconds(const double hz) const
+    // decay time of plate 1 or 2 at a frequency, s (infinite when frozen)
+    double decaySeconds(const double hz, const int plate = 0) const
     {
         if (frozen())
             return INFINITY;
-        return TinplateRt60::seconds(fValues[kParamTail], fValues[kParamDamping], fValues[kParamSize] * 0.01f, hz,
+        return plate == 0
+             ? TinplateRt60::seconds(fValues[kParamTail], fValues[kParamDamping], fValues[kParamSize] * 0.01f, hz,
+                                     sampleRate())
+             : TinplateRt60::seconds(fValues[kParamTail2], fValues[kParamDamping2], fValues[kParamSize2] * 0.01f, hz,
                                      sampleRate());
+    }
+
+    // sends of the two plates (as the DSP: constant power, exactly 1 and 0 at the ends)
+    void sends(float g[2]) const
+    {
+        const float split = std::fmin(std::fmax(fValues[kParamSplit], 0.0f), 100.0f);
+        const double a = 0.5 * M_PI * 0.01 * split;
+        g[0] = split <= 0.0f ? 1.0f : split >= 100.0f ? 0.0f : static_cast<float>(std::cos(a));
+        g[1] = split <= 0.0f ? 0.0f : split >= 100.0f ? 1.0f : static_cast<float>(std::sin(a));
+    }
+
+    // a plate gets input (its row lit, its curve drawn)
+    bool plateInUse(const int plate) const
+    {
+        float g[2];
+        sends(g);
+        return g[plate] > 0.0f;
     }
 
     static void frequencyText(const double hz, char* buf, const size_t size)
@@ -1401,20 +1443,50 @@ private:
         char f[24];
         switch (p)
         {
+        // the plate knobs, small: the effect only (the value of the control in the tooltip)
         case kParamBandwidth:
+        case kParamBandwidth2:
             frequencyText(TinplateLaw::onePoleCutoff(static_cast<float>(TinplateLaw::bandwidthCoef(v)), sampleRate()),
                           f, sizeof(f));
-            std::snprintf(buf, size, detail ? "%.3f (-3 dB at %s)" : "%.2f  |  %s", v, f);
+            if (detail)
+                std::snprintf(buf, size, "%.3f (-3 dB at %s)", v, f);
+            else
+                std::snprintf(buf, size, "%s", f);
             break;
         case kParamDamping:
+        case kParamDamping2:
             frequencyText(TinplateLaw::onePoleCutoff(static_cast<float>(TinplateLaw::dampingCoef(v)), sampleRate()),
                           f, sizeof(f));
-            std::snprintf(buf, size, detail ? "%.3f (-3 dB at %s)" : "%.2f  |  %s", v, f);
+            if (detail)
+                std::snprintf(buf, size, "%.3f (-3 dB at %s)", v, f);
+            else
+                std::snprintf(buf, size, "%s", f);
             break;
         case kParamTail:
-            std::snprintf(buf, size, detail ? "%.3f (RT60 %.2f s at 500 Hz)" : "%.2f  |  %.1f s", v,
-                          TinplateRt60::seconds(v, fValues[kParamDamping], fValues[kParamSize] * 0.01f, 500.0,
-                                                sampleRate()));
+        case kParamTail2:
+        {
+            const bool two = p == kParamTail2;
+            const double t = TinplateRt60::seconds(v, fValues[two ? kParamDamping2 : kParamDamping],
+                                                   fValues[two ? kParamSize2 : kParamSize] * 0.01f, 500.0, sampleRate());
+            if (detail)
+                std::snprintf(buf, size, "%.3f (RT60 %.2f s at 500 Hz)", v, t);
+            else
+                std::snprintf(buf, size, "%.1f s", t);
+            break;
+        }
+        case kParamSplit:
+            if (detail)
+            {
+                float g[2];
+                sends(g);
+                std::snprintf(buf, size, "%.0f %% (plate 1 x %.2f, plate 2 x %.2f)", v, g[0], g[1]);
+            }
+            else if (v < 0.5f)
+                std::snprintf(buf, size, "plate 1");
+            else if (v >= 99.5f)
+                std::snprintf(buf, size, "plate 2");
+            else
+                std::snprintf(buf, size, "%.0f %%", v);
             break;
         case kParamWet:
         case kParamDry:
@@ -1448,6 +1520,7 @@ private:
             break;
         case kParamWidth:
         case kParamSize:
+        case kParamSize2:
         case kParamModDepth: std::snprintf(buf, size, "%.0f %%", v); break;
         case kParamModRate:  std::snprintf(buf, size, "%.2f Hz", v); break;
         case kParamOutput: std::snprintf(buf, size, "%+.1f dB", v); break;
@@ -1710,45 +1783,77 @@ private:
 
     void drawInputSection()
     {
-        sectionTitle(kSecIn, "1", "INPUT", "into the plate");
+        sectionTitle(kSecIn, "1", "INPUT", "into the plates");
         drawKnob(synced() ? kKnobNote : kKnobPredelay);
         button(kSync, synced(), "SYNC", 8.5f);
         button(kStereoBtn, fValues[kParamStereoIn] > 0.5f, "STEREO", 8.5f);
-        divider(kSecIn.x + 12, kSecIn.x + kSecIn.w - 12, 262);
-        drawKnob(kKnobBandwidth);
+        divider(kSecIn.x + 12, kSecIn.x + kSecIn.w - 12, 296);
+        drawKnob(kKnobSplit);
+        // the ends of the split: plate 1, plate 2
+        const KnobDef& k = kKnobs[kKnobSplit];
+        const float e = k.r + 22.0f;
+        plateBadge(k.cx + e * std::cos(kArcStart), k.cy + e * std::sin(kArcStart), "1", plateInUse(0));
+        plateBadge(k.cx + e * std::cos(kArcStart + kArcSweep), k.cy + e * std::sin(kArcStart + kArcSweep), "2",
+                   plateInUse(1));
+    }
+
+    // small numbered disc of a plate; lit when the plate gets input
+    void plateBadge(const float cx, const float cy, const char* number, const bool lit)
+    {
+        beginPath();
+        circle(cx, cy, 7.5f);
+        if (lit)
+            fillPaint(linearGradient(0, cy - 7, 0, cy + 7, fT->hot, fT->deep));
+        else
+            fillColor(fT->deepWell);
+        fill();
+        label(cx, cy + 0.5f, 9.5f, lit ? fT->onAccent : fT->faint, ALIGN_CENTER | ALIGN_MIDDLE, number);
     }
 
     void drawTankSection()
     {
         const bool frozen = this->frozen();
-        sectionTitle(kSecTank, "2", "PLATE", "the tank of the original");
-        if (frozen)
-            globalAlpha(0.35f);   // tail and damping do not act while frozen
-        drawKnob(kKnobTail);
-        drawKnob(kKnobDamping);
-        globalAlpha(1.0f);
-        drawKnob(kKnobSize);   // acts while frozen too (pitch glide of the frozen sound)
+        sectionTitle(kSecTank, "2", "PLATE", "two tanks of the original");
+        // one row per plate: bandwidth, tail, damping, size; a plate without input is dimmed
+        static const int kRows[2][4] = { { kKnobBandwidth, kKnobTail, kKnobDamping, kKnobSize },
+                                         { kKnobBandwidth2, kKnobTail2, kKnobDamping2, kKnobSize2 } };
+        for (int row = 0; row < 2; ++row)
+        {
+            const bool used = plateInUse(row);
+            plateBadge(kSecTank.x + 16, kGridY[row], row == 0 ? "1" : "2", used);
+            const float a = used ? 1.0f : 0.35f;
+            for (int c = 0; c < 4; ++c)
+            {
+                // tail and damping do not act while frozen; size does (pitch glide of the frozen sound)
+                globalAlpha(frozen && (c == 1 || c == 2) ? 0.35f * a : a);
+                drawKnob(kRows[row][c]);
+            }
+            globalAlpha(1.0f);
+        }
+        divider(kSecTank.x + 12, kSecTank.x + kSecTank.w - 12, 318);
         if (frozen)
             globalAlpha(0.35f);   // the modulation stops while frozen
         drawKnob(kKnobModDepth);
         drawKnob(kKnobModRate);
         globalAlpha(1.0f);
-        divider(kSecTank.x + 12, kSecTank.x + kSecTank.w - 12, 352);
 
-        // decay time readout
-        const float cx = kSecTank.x + kSecTank.w * 0.5f;
-        label(cx, 386, 9.5f, fT->dim, ALIGN_CENTER | ALIGN_MIDDLE, "DECAY TIME (RT60) AT 500 HZ", 1.2f);
-        char b[64];
-        if (frozen)
-            std::snprintf(b, sizeof(b), "infinite");
-        else
-            std::snprintf(b, sizeof(b), "%.2f s", decaySeconds(500.0));
-        label(cx, 408, 22, fT->gold, ALIGN_CENTER | ALIGN_MIDDLE, b, 1);
-        if (frozen)
-            std::snprintf(b, sizeof(b), "frozen: the plate keeps ringing");
-        else
-            std::snprintf(b, sizeof(b), "125 Hz  %.2f s      4 kHz  %.2f s", decaySeconds(125.0), decaySeconds(4000.0));
-        label(cx, 430, 10, fT->dim, ALIGN_CENTER | ALIGN_MIDDLE, b, 0.5f);
+        // decay times of the two plates at 500 Hz
+        const float cx = kRt.x + kRt.w * 0.5f;
+        label(cx, kRt.y + 14, 9, fT->dim, ALIGN_CENTER | ALIGN_MIDDLE, "RT60 AT 500 HZ", 1.2f);
+        for (int row = 0; row < 2; ++row)
+        {
+            const bool used = plateInUse(row);
+            const float y = kRt.y + 42 + 30 * row;
+            char b[32];
+            if (frozen)
+                std::snprintf(b, sizeof(b), "infinite");
+            else
+                std::snprintf(b, sizeof(b), "%.2f s", decaySeconds(500.0, row));
+            globalAlpha(used ? 1.0f : 0.4f);
+            plateBadge(cx - 50, y, row == 0 ? "1" : "2", used);
+            label(cx + 10, y, 18, fT->gold, ALIGN_CENTER | ALIGN_MIDDLE, b, 1);
+            globalAlpha(1.0f);
+        }
     }
 
     void drawOutputSection()
@@ -1771,7 +1876,7 @@ private:
         drawKnob(kKnobWet);
         drawKnob(kKnobOutput);
         drawLink();
-        divider(kSecOut.x + 12, kSecOut.x + kSecOut.w - 12, 360);
+        divider(kSecOut.x + 12, kSecOut.x + kSecOut.w - 12, 366);
         drawMeters();
     }
 
@@ -2057,7 +2162,7 @@ private:
     void meterBar(const int row, const char* name, const float db)
     {
         const float y = kMeterY[row] - kMeterH * 0.5f;
-        label(kMeterX - 8, kMeterY[row], 9.5f, fT->text, ALIGN_RIGHT | ALIGN_MIDDLE, name, 1);
+        label(kMeterX - 8, kMeterY[row], 10.5f, fT->text, ALIGN_RIGHT | ALIGN_MIDDLE, name, 1);
         beginPath();
         roundedRect(kMeterX, y, kMeterW, kMeterH, 2);
         fillColor(fT->deepWell);
@@ -2085,7 +2190,7 @@ private:
 
         char b[16];
         std::snprintf(b, sizeof(b), db <= -59.9f ? "-inf" : "%.1f", db);
-        label(kMeterX + kMeterW + 8, kMeterY[row], 9.5f, fT->dim, ALIGN_LEFT | ALIGN_MIDDLE, b);
+        label(kMeterX + kMeterW + 8, kMeterY[row], 10.5f, fT->dim, ALIGN_LEFT | ALIGN_MIDDLE, b);
     }
 
     void drawMeters()
@@ -2093,14 +2198,40 @@ private:
         meterBar(0, "IN", fValues[kParamMeterIn]);
         meterBar(1, "REVERB", fValues[kParamMeterWet]);
         meterBar(2, "OUT", fValues[kParamMeterOut]);
+        // dBFS scale under the bars
+        const float y = kMeterY[2] + kMeterH * 0.5f + 4.0f;
+        const float marks[] = { -60.0f, -48.0f, -36.0f, -24.0f, -12.0f, 0.0f };
+        beginPath();
+        for (const float db : marks)
+        {
+            const float x = kMeterX + 1.5f + (kMeterW - 3.0f) * ((db + 60.0f) / 66.0f);
+            moveTo(x + 0.5f, y);
+            lineTo(x + 0.5f, y + 3.0f);
+        }
+        strokeWidth(1.0f);
+        strokeColor(fT->grid);
+        stroke();
+        for (const float db : marks)
+        {
+            const float x = kMeterX + 1.5f + (kMeterW - 3.0f) * ((db + 60.0f) / 66.0f);
+            char b[8];
+            std::snprintf(b, sizeof(b), "%.0f", db);
+            label(x + 0.5f, y + 10.0f, 7.5f, fT->faint, ALIGN_CENTER | ALIGN_MIDDLE, b);
+        }
     }
 
-    // tone of the wet signal, dB: bandwidth low-pass, low and high cut (2nd-order Butterworth)
+    // tone of the wet signal, dB: bandwidth low-passes of the plates (powers weighted by the sends),
+    // low and high cut (2nd-order Butterworth)
     double toneDb(const double hz) const
     {
         const double sr = sampleRate();
-        double g = TinplateLaw::onePoleGain(static_cast<float>(TinplateLaw::bandwidthCoef(fValues[kParamBandwidth])),
-                                            hz, sr);
+        float s[2];
+        sends(s);
+        const double g1 = TinplateLaw::onePoleGain(static_cast<float>(TinplateLaw::bandwidthCoef(fValues[kParamBandwidth])),
+                                                   hz, sr);
+        const double g2 = TinplateLaw::onePoleGain(static_cast<float>(TinplateLaw::bandwidthCoef(fValues[kParamBandwidth2])),
+                                                   hz, sr);
+        double g = std::sqrt(s[0] * s[0] * g1 * g1 + s[1] * s[1] * g2 * g2);
         const float lc = fValues[kParamLowCut];
         if (lc > kLowCutOff)
         {
@@ -2135,17 +2266,24 @@ private:
         strokeWidth(2.0f);
         strokeColor(fT->gold);
         stroke();
-        label(kDecay.x + 32, kDecay.y + 56, 9.5f, fT->dim, ALIGN_LEFT | ALIGN_MIDDLE, "RT60 (s)", 0.3f);
+        label(kDecay.x + 32, kDecay.y + 56, 9.5f, fT->dim, ALIGN_LEFT | ALIGN_MIDDLE, "RT60 1 (s)", 0.3f);
+        beginPath();
+        moveTo(kDecay.x + 12, kDecay.y + 74.5f);
+        lineTo(kDecay.x + 26, kDecay.y + 74.5f);
+        strokeWidth(1.2f);
+        strokeColor(fT->gold);
+        stroke();
+        label(kDecay.x + 32, kDecay.y + 74, 9.5f, fT->dim, ALIGN_LEFT | ALIGN_MIDDLE, "RT60 2 (s)", 0.3f);
         beginPath();
         for (float xx = kDecay.x + 12; xx < kDecay.x + 26; xx += 5.0f)
         {
-            moveTo(xx, kDecay.y + 74.5f);
-            lineTo(xx + 2.5f, kDecay.y + 74.5f);
+            moveTo(xx, kDecay.y + 92.5f);
+            lineTo(xx + 2.5f, kDecay.y + 92.5f);
         }
         strokeWidth(1.6f);
         strokeColor(fT->tone);
         stroke();
-        label(kDecay.x + 32, kDecay.y + 74, 9.5f, fT->dim, ALIGN_LEFT | ALIGN_MIDDLE, "tone (dB)", 0.3f);
+        label(kDecay.x + 32, kDecay.y + 92, 9.5f, fT->dim, ALIGN_LEFT | ALIGN_MIDDLE, "tone (dB)", 0.3f);
 
         beginPath();
         rect(r.x, r.y, r.w, r.h);
@@ -2157,7 +2295,9 @@ private:
         for (int j = 0; j <= 60; ++j)
         {
             const double hz = 20.0 * std::pow(fmax / 20.0, j / 60.0);
-            top = std::fmax(top, frozen() ? 0.0 : decaySeconds(hz));
+            for (int pl = 0; pl < 2; ++pl)
+                if (plateInUse(pl))
+                    top = std::fmax(top, frozen() ? 0.0 : decaySeconds(hz, pl));
         }
         const double full = frozen() ? 6.0 : top <= 1.9 ? 2.0 : top <= 3.8 ? 4.0 : top <= 5.7 ? 6.0
                           : top <= 7.6 ? 8.0 : top <= 9.5 ? 10.0 : top <= 11.4 ? 12.0 : top <= 15.2 ? 16.0
@@ -2223,24 +2363,32 @@ private:
             strokeColor(fT->tone);
             stroke();
         }
-        // decay time
-        for (int pass = 0; pass < 2; ++pass)
+        // decay time of each plate with input (plate 2: thinner)
+        for (int pl = 1; pl >= 0; --pl)
         {
-            beginPath();
-            for (int j = 0; j <= n; ++j)
+            if (!plateInUse(pl))
+                continue;
+            for (int pass = 0; pass < 2; ++pass)
             {
-                const double hz = 20.0 * std::pow(fmax / 20.0, static_cast<double>(j) / n);
-                const float y = frozen() ? r.y + 1.0f : ty(decaySeconds(hz));
-                if (j == 0)
-                    moveTo(fx(hz), y);
+                beginPath();
+                for (int j = 0; j <= n; ++j)
+                {
+                    const double hz = 20.0 * std::pow(fmax / 20.0, static_cast<double>(j) / n);
+                    const float y = frozen() ? r.y + 1.0f : ty(decaySeconds(hz, pl));
+                    if (j == 0)
+                        moveTo(fx(hz), y);
+                    else
+                        lineTo(fx(hz), y);
+                }
+                lineCap(ROUND);
+                lineJoin(ROUND);
+                if (pl == 0)
+                    strokeWidth(pass == 0 ? 7.0f : 2.2f);
                 else
-                    lineTo(fx(hz), y);
+                    strokeWidth(pass == 0 ? 4.0f : 1.2f);
+                strokeColor(pass == 0 ? fT->curveGlow : fT->gold);
+                stroke();
             }
-            lineCap(ROUND);
-            lineJoin(ROUND);
-            strokeWidth(pass == 0 ? 7.0f : 2.2f);
-            strokeColor(pass == 0 ? fT->curveGlow : fT->gold);
-            stroke();
         }
         restore();
         if (xEnd < r.x + r.w - 1.0f)

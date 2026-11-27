@@ -44,6 +44,12 @@
  * 19. History outputs: input and reverb peaks, cut of the ducking, count of the clearings.
  * 13. Link: the parameter Mix sets dry and wet as the blend of CAPS; the levels are ignored,
  *     even automated; automation of Mix gives, after the ramp, the output of the new mix.
+ * 20. Two plates: modulation off and plate 2 set as plate 1, Split 100 gives the output of Split 0
+ *     to the bit, Split 50 that times cos 45 + sin 45 (rounding only); plates of different settings:
+ *     the reverb at Split 50 has the mean energy of the two plates alone (constant power, within
+ *     1 dB); Split moved while playing: no click; a plate stopped (send 0, tail died away), its
+ *     settings changed, started again: the output of a fresh plugin (residue of plate 1 only);
+ *     Clear with both plates: after the fade, the output of a fresh plugin.
  */
 #include "src/DistrhoPluginInternal.hpp"
 #include "src/DistrhoPlugin.cpp"
@@ -942,6 +948,120 @@ int main()
                       outs[kParamHistWet], outs[kParamHistCut], outs[kParamHistClears]);
         check(std::fabs(outs[kParamHistIn] - 0.5f) < 1e-3f && outs[kParamHistWet] > 0.0f && outs[kParamHistCut] > 5.0f
               && outs[kParamHistClears] == 2.0f, buf);
+    }
+
+    // 20. two plates ----------------------------------------------------------------------------
+    std::printf("20. two plates\n");
+    {
+        Settings s = originalSettings(0.8f, 0.6f, 0.4f, 1.0f);
+        s.values[kParamModDepth] = 0.0f;   // no modulation: the phase of plate 2 plays no part
+        s.values[kParamBandwidth2] = 0.8f;
+        s.values[kParamTail2] = 0.6f;
+        s.values[kParamDamping2] = 0.4f;
+        s.values[kParamSize2] = 100.0f;
+        process(s, sr, L, R, rL, rR);
+        s.values[kParamSplit] = 100.0f;
+        process(s, sr, L, R, oL, oR);
+        bool same = true;
+        for (size_t i = 0; i < N; ++i)
+            same = same && oL[i] == rL[i] && oR[i] == rR[i];
+        check(same, "same settings, no modulation: Split 100 (plate 2 only) == Split 0, to the bit");
+        s.values[kParamSplit] = 50.0f;
+        process(s, sr, L, R, oL, oR);
+        const double k = static_cast<float>(std::cos(0.25 * M_PI)) + static_cast<double>(static_cast<float>(std::sin(0.25 * M_PI)));
+        double d = 0.0;
+        for (size_t i = 0; i < N; ++i)
+            d = std::max(d, std::max(std::fabs(oL[i] - k * rL[i]), std::fabs(oR[i] - k * rR[i])));
+        char buf[200];
+        std::snprintf(buf, sizeof(buf), "same settings, Split 50: output of Split 0 x %.5f, error / peak %.1e", k,
+                      d / peakOf(rL));
+        check(d / peakOf(rL) < 1e-5, buf);
+
+        // constant power: energy of the reverb of a burst, plates of different settings
+        std::vector<float> burst(static_cast<size_t>(4.0 * sr), 0.0f);
+        std::mt19937 rng(7);
+        std::uniform_real_distribution<float> u(-0.5f, 0.5f);
+        for (size_t i = 0; i < static_cast<size_t>(0.3 * sr); ++i)
+            burst[i] = u(rng);
+        s = originalSettings(0.8f, 0.5f, 0.4f, 1.0f);
+        s.values[kParamBandwidth2] = 0.6f;
+        s.values[kParamTail2] = 0.7f;
+        s.values[kParamDamping2] = 0.6f;
+        s.values[kParamSize2] = 150.0f;
+        double e[3];
+        const float splits[3] = { 0.0f, 100.0f, 50.0f };
+        for (int j = 0; j < 3; ++j)
+        {
+            s.values[kParamSplit] = splits[j];
+            process(s, sr, burst, burst, oL, oR);
+            e[j] = rms(oL, 0, oL.size()) * rms(oL, 0, oL.size()) + rms(oR, 0, oR.size()) * rms(oR, 0, oR.size());
+        }
+        const double gap = 10.0 * std::log10(e[2] / (0.5 * (e[0] + e[1])));
+        std::snprintf(buf, sizeof(buf), "Split 50: energy %.2f dB from the mean of the plates alone (plate 2 %+.1f dB from plate 1)",
+                      gap, 10.0 * std::log10(e[1] / e[0]));
+        check(std::fabs(gap) < 1.0, buf);
+
+        // Split moved while playing
+        std::vector<float> tone(static_cast<size_t>(2.0 * sr));
+        for (size_t i = 0; i < tone.size(); ++i)
+            tone[i] = 0.3f * static_cast<float>(std::sin(2.0 * M_PI * 220.0 * i / sr));
+        const size_t at = static_cast<size_t>(1.0 * sr);
+        const auto maxStep = [&](const std::vector<float>& y, const size_t a, const size_t b) {
+            float m = 0.0f;
+            for (size_t i = a; i < b; ++i)
+                m = std::max(m, std::fabs(y[i] - y[i - 1]));
+            return m;
+        };
+        s.values[kParamSplit] = 0.0f;
+        process(s, sr, tone, tone, rL, rR);
+        process(s, sr, tone, tone, oL, oR, { { at, kParamSplit, 100.0f }, { at + static_cast<size_t>(0.3 * sr), kParamSplit, 0.0f } });
+        const float steady = maxStep(rL, at, at + static_cast<size_t>(0.6 * sr));
+        const float moved = maxStep(oL, at, at + static_cast<size_t>(0.6 * sr));
+        std::snprintf(buf, sizeof(buf), "Split 0 -> 100 -> 0 while playing: largest step %.4f (steady %.4f)", moved, steady);
+        check(moved < 1.5f * steady, buf);
+
+        // plate 2 stopped, its size changed, started again: as a fresh plugin
+        s = originalSettings(0.8f, 0.5f, 0.4f, 1.0f);
+        s.values[kParamModDepth] = 0.0f;   // plate 1 runs on: its modulation would not restart
+        s.values[kParamSplit] = 50.0f;
+        const size_t T = static_cast<size_t>(6.0 * sr), n = T + static_cast<size_t>(1.0 * sr);
+        std::vector<float> x(n, 0.0f);
+        for (size_t i = 0; i < static_cast<size_t>(0.3 * sr); ++i)
+            x[i] = u(rng);
+        for (size_t i = T + static_cast<size_t>(0.1 * sr); i < T + static_cast<size_t>(0.4 * sr); ++i)
+            x[i] = u(rng);
+        const std::vector<float> after(x.begin() + static_cast<long>(T), x.end());
+        Settings f = s;
+        f.values[kParamSize2] = 80.0f;
+        process(f, sr, after, after, rL, rR);
+        process(s, sr, x, x, oL, oR, { { static_cast<size_t>(0.5 * sr), kParamSplit, 0.0f },
+                                       { static_cast<size_t>(5.0 * sr), kParamSize2, 80.0f },
+                                       { T, kParamSplit, 50.0f } });
+        d = 0.0;
+        for (size_t i = T; i < n; ++i)
+            d = std::max(d, std::max<double>(std::fabs(oL[i] - rL[i - T]), std::fabs(oR[i] - rR[i - T])));
+        std::snprintf(buf, sizeof(buf), "plate 2 stopped, size changed, started again: gap to a fresh plugin %.1e of %.2f",
+                      d, peakOf(rL));
+        check(d < 1e-5 * peakOf(rL), buf);
+
+        // clear with both plates
+        const size_t A = static_cast<size_t>(0.9 * sr), m = static_cast<size_t>(2.5 * sr);
+        std::vector<float> y(m, 0.0f);
+        for (size_t i = 0; i < static_cast<size_t>(0.3 * sr); ++i)
+            y[i] = u(rng);
+        for (size_t i = A; i < A + static_cast<size_t>(0.4 * sr); ++i)
+            y[i] = 0.5f * static_cast<float>(std::cos(2.0 * M_PI * 330.0 * (i - A) / sr));
+        s = originalSettings(0.8f, 0.8f, 0.3f, 1.0f);
+        s.values[kParamSplit] = 50.0f;
+        s.values[kParamClear] = 1.0f;
+        const std::vector<float> after2(y.begin() + static_cast<long>(A), y.end());
+        process(s, sr, after2, after2, rL, rR);
+        process(s, sr, y, y, oL, oR);
+        d = 0.0;
+        for (size_t i = A + static_cast<size_t>(0.06 * sr); i < m; ++i)
+            d = std::max(d, std::max<double>(std::fabs(oL[i] - rL[i - A]), std::fabs(oR[i] - rR[i - A])));
+        std::snprintf(buf, sizeof(buf), "clear, Split 50: after the fade, gap to a fresh plugin %.1e", d / peakOf(rL));
+        check(d / peakOf(rL) < 1e-5, buf);
     }
 
     std::printf("%s\n", gFailures == 0 ? "all DSP tests passed" : "DSP TESTS FAILED");

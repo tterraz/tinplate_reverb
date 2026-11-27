@@ -15,7 +15,8 @@
  *   size     music, Size moved between 100 and 150 % every 0.25 s: the lengths glide (read
  *            with interpolation) all the time, the worst case;
  *   ducking  music, Duck 12 dB (detector and gain at every sample);
- *   options  music, stereo input on (two sets of input filters) and mono bass 150 Hz.
+ *   options  music, stereo input on (two sets of input filters) and mono bass 150 Hz;
+ *   two      music, Split 50 %: both plates in parallel.
  * Best of 3 runs.  Result: ns per stereo frame and load of one instance in % of one core in
  * real time.
  *
@@ -37,8 +38,8 @@ USE_NAMESPACE_DISTRHO
 static const uint32_t kBlock = 512;
 static const double kSeconds = 10.0;
 
-enum { kMusic = 0, kSilence, kClear, kSize, kDucking, kOptions, kNumCases };
-static const char* const kCaseNames[kNumCases] = { "music", "silence", "clear", "size", "ducking", "options" };
+enum { kMusic = 0, kSilence, kClear, kSize, kDucking, kOptions, kTwo, kNumCases };
+static const char* const kCaseNames[kNumCases] = { "music", "silence", "clear", "size", "ducking", "options", "two" };
 
 static void fillMusic(std::vector<float>& L, std::vector<float>& R, const size_t n0, const size_t n1)
 {
@@ -84,6 +85,8 @@ static double timeRun(const int c, const double rate)
         p.setParameterValue(kParamStereoIn, 1.0f);
         p.setParameterValue(kParamMonoBass, 150.0f);
     }
+    if (c == kTwo)
+        p.setParameterValue(kParamSplit, 50.0f);   // both plates
     p.activate();
 
     const size_t sizeStep = static_cast<size_t>(0.25 * rate);

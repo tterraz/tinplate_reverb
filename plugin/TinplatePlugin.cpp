@@ -73,6 +73,18 @@
  *
  * History (outputs for the interface): input and reverb peaks and the cut of the ducking over the
  * last ~30 ms, and the count of the clearings.
+ *
+ * Two plates in parallel (after 1.2.0): the input of the tank (after the pre-delay, the freeze
+ * gain and the stereo input) feeds plate 1 times cos(a) and plate 2 times sin(a), a = Split x 90
+ * degrees (constant power: the level of the reverb stays about the same over the knob when the
+ * two tails are uncorrelated); their outputs are summed before the low cut.  Plate 2 has its own
+ * Bandwidth, Tail, Damping and Size; the modulation (depth, rate), the freeze and the clearing are
+ * shared (each plate has its own pair of plates for Clear, switched together).  Its modulation
+ * starts 45 degrees later, so that two plates with the same settings still differ a little.  A
+ * plate whose send is 0 is computed until its tail has stayed under -120 dBFS for 50 ms, then
+ * emptied and no longer computed; it starts again empty, at its settings at once, its send
+ * ramped up in 20 ms.  Split 0 (the default): plate 1 only, gain exactly 1, the output to the bit
+ * that of a single plate; Split 100: plate 2 only.
  */
 
 #include "DistrhoPlugin.hpp"
@@ -275,6 +287,18 @@ struct RecentPeak
     }
 };
 
+// One of the two plates in parallel, with the plate that takes over at a clearing, the ramps of
+// its own coefficients and its send (share of the input).
+struct PlateLine
+{
+    PlateCore::Plate plate[2];   // clear: the current one fCur, the other one fading out or empty
+    Ramp<float> bandwidth, decay, damping, send;
+    bool running = false;        // computed: its send is not 0, or its tail still rings
+    int quiet = 0;               // samples in a row under kStopLevel while its send is 0
+};
+
+static const float kStopLevel = 1e-6f;   // -120 dBFS: a plate whose send is 0 stops under it
+
 class TinplatePlugin : public Plugin
 {
 public:
@@ -295,7 +319,8 @@ protected:
     const char* getDescription() const override
     {
         return "Plate reverb after CAPS PlateX2 (Plate2x2) by Tim Goetze: Dattorro's plate, "
-               "with pre-delay, size, modulation, low and high cut, width, freeze, ducking and clear.";
+               "with a second plate in parallel, pre-delay, size, modulation, low and high cut, width, "
+               "freeze, ducking and clear.";
     }
     const char* getMaker() const override { return "Tinplate"; }
     const char* getLicense() const override { return "GPL-3.0-or-later"; }
@@ -343,6 +368,11 @@ protected:
             break;
         case kParamWidth:     set(p, "Width", "width", "%"); break;
         case kParamOutput:    set(p, "Output", "output", "dB"); break;
+        case kParamSplit:     set(p, "Plate split", "split", "%"); break;
+        case kParamBandwidth2: set(p, "Bandwidth 2", "bandwidth2", ""); break;
+        case kParamTail2:     set(p, "Tail 2", "tail2", ""); break;
+        case kParamDamping2:  set(p, "Damping 2", "damping2", ""); break;
+        case kParamSize2:     set(p, "Size 2", "size2", "%"); break;
         case kParamFreeze:
             set(p, "Freeze", "freeze", "");
             p.hints |= kParameterIsBoolean | kParameterIsInteger;
@@ -518,54 +548,45 @@ protected:
                 xb = (dr + fNormal) * inGain;
             }
 
-            if (fBandwidth.moving())
-            {
-                const float v = fBandwidth.next();
-                fPlate[0].setBandwidth(v);
-                fPlate[1].setBandwidth(v);
-            }
-            if (fDamping.moving())
-            {
-                const float v = fDamping.next();
-                fPlate[0].setDamping(v);
-                fPlate[1].setDamping(v);
-            }
             if (fModulation.moving())
             {
                 const float v = fModulation.next();
-                fPlate[0].setModulation(v);
-                fPlate[1].setModulation(v);
+                for (PlateLine& line : fLines)
+                {
+                    line.plate[0].setModulation(v);
+                    line.plate[1].setModulation(v);
+                }
             }
 
             if (fClearOn || fArmed)
                 detectAttack(std::fmax(std::fabs(sl), std::fabs(sr)));
 
-            const float decay = fDecay.next();
-            float wl, wr;
-            if (stereo)
-                fPlate[fCur].processStereo(xa, xb, t, decay, &wl, &wr);
-            else
-                fPlate[fCur].process(x, decay, &wl, &wr);
-            if (fFadeLeft > 0)
+            // the two plates in parallel, each fed its share of the input
+            const bool fading = fFadeLeft > 0;
+            const float fade = fading ? 0.5f + 0.5f * std::cos(static_cast<float>(M_PI)
+                                                               * (1.0f - static_cast<float>(fFadeLeft) / fFadeLength))
+                                      : 0.0f;
+            float wl = 0.0f, wr = 0.0f;
+            if (fLines[0].running)
+                runLine(fLines[0], stereo, x, xa, xb, t, fading, fade, wl, wr);
+            if (fLines[1].running)
             {
-                // the old plate: input closed, fading out, then emptied
-                float ol, orr;
-                if (stereo)
-                    fPlate[1 - fCur].processStereo(0.0f, 0.0f, t, decay, &ol, &orr);
-                else
-                    fPlate[1 - fCur].process(0.0f, decay, &ol, &orr);
-                const float g = 0.5f + 0.5f * std::cos(static_cast<float>(M_PI)
-                                                       * (1.0f - static_cast<float>(fFadeLeft) / fFadeLength));
-                wl += ol * g;
-                wr += orr * g;
-                if (--fFadeLeft == 0)
-                    fPlate[1 - fCur].activate();
+                float pl, pr;
+                runLine(fLines[1], stereo, x, xa, xb, t, fading, fade, pl, pr);
+                wl += pl;
+                wr += pr;
             }
+            if (fading && --fFadeLeft == 0)
+                for (PlateLine& line : fLines)
+                    line.plate[1 - fCur].activate();
             if (stereo && t == 0.0f)
             {
                 // back to the mono input: the second channel is emptied, then no longer computed
-                fPlate[0].resetInput2();
-                fPlate[1].resetInput2();
+                for (PlateLine& line : fLines)
+                {
+                    line.plate[0].resetInput2();
+                    line.plate[1].resetInput2();
+                }
             }
             if (fFlash > 0)
                 --fFlash;
@@ -620,6 +641,17 @@ protected:
         }
         fNormal = -fNormal;   // as the original after each block
 
+        // a plate whose send is 0 stops once its tail has died away
+        const int quietLength = static_cast<int>(0.05 * getSampleRate());
+        for (PlateLine& line : fLines)
+            if (line.running && line.send.cur == 0.0f && !line.send.moving() && line.quiet >= quietLength)
+            {
+                line.plate[0].activate();
+                line.plate[1].activate();
+                line.running = false;
+                line.quiet = 0;
+            }
+
         const float fall = std::exp(-static_cast<float>(frames) / (0.25f * static_cast<float>(getSampleRate())));
         fMeterIn = std::fmax(peakIn, fMeterIn * fall);
         fMeterWet = std::fmax(peakWet, fMeterWet * fall);
@@ -663,8 +695,12 @@ private:
     void allocate()
     {
         const double sr = getSampleRate();
-        fPlate[0].init(static_cast<float>(sr));
-        fPlate[1].init(static_cast<float>(sr));
+        for (int k = 0; k < 2; ++k)
+            for (PlateCore::Plate& p : fLines[k].plate)
+            {
+                p.init(static_cast<float>(sr));
+                p.setPhase(k == 0 ? 0.0 : 0.25 * M_PI);   // plate 2: modulation 45 degrees later
+            }
         const unsigned n = PlateCore::nextPowerOf2(static_cast<unsigned>(0.001 * kPredelayMaxMs * sr) + 2);
         fPre[0].assign(n, 0.0f);
         fPre[1].assign(n, 0.0f);
@@ -678,15 +714,58 @@ private:
         const int n = ramp ? static_cast<int>(0.02 * sr) : 0;
         const bool freeze = fParams[kParamFreeze] > 0.5f;
 
-        fBandwidth.set(static_cast<float>(TinplateLaw::bandwidthCoef(fParams[kParamBandwidth])), n);
-        fDecay.set(freeze ? 1.0f : TinplateLaw::decay(fParams[kParamTail]), n);
-        fDamping.set(freeze ? 1.0f : static_cast<float>(TinplateLaw::dampingCoef(fParams[kParamDamping])), n);
         fInGain.set(freeze ? 0.0f : 1.0f, n);
         fModulation.set(freeze ? 0.0f : fParams[kParamModDepth] / 100.0f, ramp ? static_cast<int>(0.2 * sr) : 0);
         // rate: 1.2 Hz exactly as the original (the float parameter is not exactly 1.2)
         const double rate = fParams[kParamModRate] == 1.2f ? 1.2 : static_cast<double>(fParams[kParamModRate]);
-        for (PlateCore::Plate& p : fPlate)
-            p.setModRate(rate);
+        for (PlateLine& line : fLines)
+            for (PlateCore::Plate& p : line.plate)
+                p.setModRate(rate);
+        // the two plates: sends (constant power; exactly 1 and 0 at the ends) and coefficients
+        const float split = std::fmin(std::fmax(fParams[kParamSplit], 0.0f), 100.0f);
+        const double angle = 0.5 * M_PI * 0.01 * split;
+        const float sends[2] = { split <= 0.0f ? 1.0f : split >= 100.0f ? 0.0f : static_cast<float>(std::cos(angle)),
+                                 split <= 0.0f ? 0.0f : split >= 100.0f ? 1.0f : static_cast<float>(std::sin(angle)) };
+        static const int kPlateParams[2][4] = { { kParamBandwidth, kParamTail, kParamDamping, kParamSize },
+                                                { kParamBandwidth2, kParamTail2, kParamDamping2, kParamSize2 } };
+        for (int k = 0; k < 2; ++k)
+        {
+            PlateLine& line = fLines[k];
+            const int* const q = kPlateParams[k];
+            const float bw = static_cast<float>(TinplateLaw::bandwidthCoef(fParams[q[0]]));
+            const float decay = freeze ? 1.0f : TinplateLaw::decay(fParams[q[1]]);
+            const float damp = freeze ? 1.0f : static_cast<float>(TinplateLaw::dampingCoef(fParams[q[2]]));
+            const float size = fParams[q[3]] / 100.0f;
+            if (!ramp || (!line.running && sends[k] > 0.0f))
+            {
+                // reset, or a stopped (empty) plate starting again: its settings at once
+                line.bandwidth.reset(bw);
+                line.decay.reset(decay);
+                line.damping.reset(damp);
+                for (PlateCore::Plate& p : line.plate)
+                {
+                    p.setBandwidth(bw);
+                    p.setDamping(damp);
+                    p.setModulation(fModulation.cur);
+                    p.setSize(size, 0);
+                    p.finishGlide();
+                }
+                line.send.reset(ramp ? 0.0f : sends[k]);
+                line.send.set(sends[k], n);
+                line.running = sends[k] > 0.0f;
+                line.quiet = 0;
+            }
+            else
+            {
+                line.bandwidth.set(bw, n);
+                line.decay.set(decay, n);
+                line.damping.set(damp, n);
+                line.send.set(sends[k], n);
+                // size: the lengths glide in 100 ms (pitch glide)
+                for (PlateCore::Plate& p : line.plate)
+                    p.setSize(size, static_cast<int>(0.1 * sr));
+            }
+        }
         if (fParams[kParamLink] > 0.5f)
         {
             // linked: the mix, as the blend of CAPS (same gains, to the bit)
@@ -706,9 +785,6 @@ private:
         fBypass.set(fParams[kParamBypass] > 0.5f ? 1.0f : 0.0f, ramp ? static_cast<int>(0.01 * sr) : 0);
         fLowCut.set(fParams[kParamLowCut], sr, n);
         fHighCut.set(fParams[kParamHighCut], sr, n);
-        // size: the lengths glide in 100 ms (pitch glide), taken at once when not ramping
-        for (PlateCore::Plate& p : fPlate)
-            p.setSize(fParams[kParamSize] / 100.0f, ramp ? static_cast<int>(0.1 * sr) : 0);
         // ducking: no ramp, the cut is smoothed by the attack and release themselves
         fDuckDepth = fParams[kParamDuck];
         fDuckThresholdDb = fParams[kParamThreshold];
@@ -737,15 +813,43 @@ private:
             fPreNext = std::min(pd, fPreMask - 1);
             fPreFadeLength = fPreFade = std::max(1, static_cast<int>(0.03 * sr));
         }
-        if (!ramp)
+    }
+
+    // one sample of one of the plates in parallel (the current one, and the old one fading out)
+    inline void runLine(PlateLine& line, const bool stereo, const float x, const float xa, const float xb, const float t,
+                        const bool fading, const float fade, float& pl, float& pr)
+    {
+        if (line.bandwidth.moving())
         {
-            for (PlateCore::Plate& p : fPlate)
-            {
-                p.setBandwidth(fBandwidth.cur);
-                p.setDamping(fDamping.cur);
-                p.setModulation(fModulation.cur);
-            }
+            const float v = line.bandwidth.next();
+            line.plate[0].setBandwidth(v);
+            line.plate[1].setBandwidth(v);
         }
+        if (line.damping.moving())
+        {
+            const float v = line.damping.next();
+            line.plate[0].setDamping(v);
+            line.plate[1].setDamping(v);
+        }
+        const float decay = line.decay.next();
+        const float send = line.send.next();
+        if (stereo)
+            line.plate[fCur].processStereo(xa * send, xb * send, t, decay, &pl, &pr);
+        else
+            line.plate[fCur].process(x * send, decay, &pl, &pr);
+        if (fading)
+        {
+            // the old plate: input closed, fading out, then emptied
+            float ol, orr;
+            if (stereo)
+                line.plate[1 - fCur].processStereo(0.0f, 0.0f, t, decay, &ol, &orr);
+            else
+                line.plate[1 - fCur].process(0.0f, decay, &ol, &orr);
+            pl += ol * fade;
+            pr += orr * fade;
+        }
+        if (send == 0.0f)
+            line.quiet = std::fmax(std::fabs(pl), std::fabs(pr)) < kStopLevel ? line.quiet + 1 : 0;
     }
 
     // gain of the reverb for an input peak; follows the cut fDuckDb
@@ -787,7 +891,8 @@ private:
             if (fParams[kParamFreeze] > 0.5f || fInGain.cur != 1.0f)
                 return;           // frozen (or freezing): the frozen sound is kept
             fCur = 1 - fCur;
-            fPlate[fCur].finishGlide();   // empty: its lengths go to the size at once
+            for (PlateLine& line : fLines)
+                line.plate[fCur].finishGlide();   // empty: its lengths go to the size at once
             fFadeLength = fFadeLeft = std::max(1, static_cast<int>(1e-3 * fParams[kParamFade] * getSampleRate()));
             fFlash = fFlashLength;
             ++fClears;
@@ -816,15 +921,15 @@ private:
 
     void resetState()
     {
-        fPlate[0].activate();
-        fPlate[1].activate();
+        for (PlateLine& line : fLines)
+        {
+            line.plate[0].activate();
+            line.plate[1].activate();
+        }
         fCur = 0;
         fFadeLeft = fFlash = fRise = 0;
         fArmed = false;
         fEnv = 0.0f;
-        fBandwidth.reset(0.0f);
-        fDecay.reset(0.0f);
-        fDamping.reset(0.0f);
         fInGain.reset(0.0f);
         fModulation.reset(0.0f);
         fWet.reset(0.0f);
@@ -852,10 +957,10 @@ private:
     float fParams[kParamCount];
     String fStates[kStateCount];   // strings of the interface, only kept for the host
 
-    PlateCore::Plate fPlate[2];    // clear: the current one fCur, the other one fading out or empty
+    PlateLine fLines[2];           // plates 1 and 2 in parallel; clear: plate[fCur] of each is current
     float fNormal = 1e-20f;        // NOISE_FLOOR of CAPS
     bool fRamp = false;
-    Ramp<float> fBandwidth, fDecay, fDamping, fInGain, fModulation, fWet, fDry, fWidth, fStereo, fGain, fBypass;
+    Ramp<float> fInGain, fModulation, fWet, fDry, fWidth, fStereo, fGain, fBypass;
     Cut2 fLowCut, fHighCut, fMonoBass;   // mono bass: high-pass of the side signal
     std::vector<float> fPre[2];          // pre-delay of the left and right channels
     double fBpm = TinplateNote::kDefaultBpm;
