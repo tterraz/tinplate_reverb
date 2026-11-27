@@ -164,9 +164,9 @@ static const Rect kPlot    = { 150, 788, 680, 104 };   // decay time against fre
 enum { kKnobPredelay = 0, kKnobBandwidth, kKnobTail, kKnobDamping, kKnobWet, kKnobWidth, kKnobLowCut,
        kKnobOutput, kKnobDuck, kKnobThreshold, kKnobAttack, kKnobRelease, kKnobFloor, kKnobTrigger, kKnobFade,
        kKnobWindow, kKnobDry, kKnobSize, kKnobHighCut, kKnobModDepth, kKnobModRate, kKnobNote, kKnobMonoBass,
-       kKnobSplit, kKnobBandwidth2, kKnobTail2, kKnobDamping2, kKnobSize2, kNumKnobs };
+       kKnobSplit, kKnobBandwidth2, kKnobTail2, kKnobDamping2, kKnobSize2, kKnobSmooth, kNumKnobs };
 
-// PLATE: one row per plate (bandwidth, tail, damping, size), then the shared modulation
+// PLATE: one row per plate (bandwidth, tail, damping, size), then the shared modulation and smooth
 static constexpr float kGridX[4] = { 316.0f, 389.0f, 462.0f, 535.0f };
 static constexpr float kGridY[3] = { 140.0f, 248.0f, 382.0f };
 static constexpr float kGridR = 22.0f;
@@ -257,6 +257,10 @@ static constexpr KnobDef kKnobs[kNumKnobs] = {
     { kParamSize2,     kGridX[3], kGridY[1], kGridR, "SIZE",
       "Plate B: lengths of its delays, 50 to 200 %. A plate B of another size than plate A makes the "
       "two tails differ (a denser, less metallic sum)." },
+    { kParamSmooth,    kGridX[2], kGridY[2], kGridR, "SMOOTH",
+      "Both plates: evens out the end of the tail (no more level waves, beats at 11 and 33 Hz) by lower "
+      "coefficients of the allpasses of the loop and short allpasses added; 0 %: the original. The "
+      "decay time at 500 Hz is kept (Tail compensated); the tail turns a little grainier." },
 };
 
 // kKnobs follows the order of the enum above
@@ -273,11 +277,12 @@ static_assert(kKnobs[kKnobPredelay].param == kParamPredelay && kKnobs[kKnobBandw
               && kKnobs[kKnobModRate].param == kParamModRate && kKnobs[kKnobNote].param == kParamNote
               && kKnobs[kKnobMonoBass].param == kParamMonoBass && kKnobs[kKnobSplit].param == kParamSplit
               && kKnobs[kKnobBandwidth2].param == kParamBandwidth2 && kKnobs[kKnobTail2].param == kParamTail2
-              && kKnobs[kKnobDamping2].param == kParamDamping2 && kKnobs[kKnobSize2].param == kParamSize2,
+              && kKnobs[kKnobDamping2].param == kParamDamping2 && kKnobs[kKnobSize2].param == kParamSize2
+              && kKnobs[kKnobSmooth].param == kParamSmooth,
               "kKnobs: one entry per knob, in the order of the enum");
 
 static const Rect kFreeze  = { 605, 314, 110, 26 };   // OUTPUT, under Low cut and High cut
-static const Rect kRt      = { 432, 342, 140, 100 };   // decay times of the two plates, by the modulation
+static const Rect kRt      = { 500, 342, 74, 100 };    // decay times of the two plates, by Smooth
 static const Rect kPreset  = { 344, 16, 176, 26 };     // drop-down box; the list opens below it
 static const Rect kAB      = { 528, 17, 48, 24 };      // A | B
 static const Rect kCopy    = { 580, 17, 34, 24 };      // copy the current set to the other
@@ -375,7 +380,7 @@ static const Zone kZones[kNumZones] = {
     { kHistLengthBox, "HISTORY LENGTH", "Time shown by the history: 3, 7 or 30 seconds." },
     { kRandom, "RANDOM",
       "Draws the sound at random, each setting over the travel of its knob: both plates, Split, Depth, "
-      "Rate, Pre-delay, Low cut, High cut, Width, Mono bass. Levels, Link, ducking, Clear, Sync, Stereo "
+      "Rate, Smooth, Pre-delay, Low cut, High cut, Width, Mono bass. Levels, Link, ducking, Clear, Sync, Stereo "
       "input and Freeze are kept. Shown as the preset \"Random\"; A / B to compare." },
 };
 
@@ -1140,7 +1145,7 @@ private:
         static const int kDrawn[] = { kParamBandwidth, kParamTail, kParamDamping, kParamSize, kParamModDepth,
                                       kParamModRate, kParamPredelay, kParamLowCut, kParamHighCut, kParamWidth,
                                       kParamMonoBass, kParamSplit, kParamBandwidth2, kParamTail2, kParamDamping2,
-                                      kParamSize2 };
+                                      kParamSize2, kParamSmooth };
         float values[kPresetParamCount];
         for (int i = 0; i < kPresetParamCount; ++i)
             values[i] = fValues[i];
@@ -1435,7 +1440,8 @@ private:
         else if (p == kParamPredelay || p == kParamLowCut || p == kParamHighCut || p == kParamWidth || p == kParamSize || p == kParamModDepth
                  || p == kParamThreshold
                  || p == kParamRelease || p == kParamFloor || p == kParamTrigger || p == kParamFade
-                 || p == kParamWindow || p == kParamMonoBass || p == kParamSplit || p == kParamSize2)
+                 || p == kParamWindow || p == kParamMonoBass || p == kParamSplit || p == kParamSize2
+                 || p == kParamSmooth)
             fmt = "%.0f";
         std::snprintf(buf, size, fmt, v);
     }
@@ -1565,6 +1571,12 @@ private:
         case kParamSize:
         case kParamSize2:
         case kParamModDepth: std::snprintf(buf, size, "%.0f %%", v); break;
+        case kParamSmooth:
+            if (v < 0.5f)
+                std::snprintf(buf, size, detail ? "0 %% (the original)" : "off");
+            else
+                std::snprintf(buf, size, "%.0f %%", v);
+            break;
         case kParamModRate:  std::snprintf(buf, size, "%.2f Hz", v); break;
         case kParamOutput: std::snprintf(buf, size, "%+.1f dB", v); break;
         case kParamDuck:
@@ -1881,22 +1893,24 @@ private:
         drawKnob(kKnobModDepth);
         drawKnob(kKnobModRate);
         globalAlpha(1.0f);
+        drawKnob(kKnobSmooth);
 
         // decay times of the two plates at 500 Hz
         const float cx = kRt.x + kRt.w * 0.5f;
-        label(cx, kRt.y + 14, 9, fT->dim, ALIGN_CENTER | ALIGN_MIDDLE, "RT60 AT 500 HZ", 1.2f);
+        label(cx, kRt.y + 10, 9, fT->dim, ALIGN_CENTER | ALIGN_MIDDLE, "RT60", 1.2f);
+        label(cx, kRt.y + 22, 9, fT->dim, ALIGN_CENTER | ALIGN_MIDDLE, "500 HZ", 1.2f);
         for (int row = 0; row < 2; ++row)
         {
             const bool used = plateInUse(row);
-            const float y = kRt.y + 42 + 30 * row;
+            const float y = kRt.y + 48 + 28 * row;
             char b[32];
             if (frozen)
                 std::snprintf(b, sizeof(b), "infinite");
             else
                 std::snprintf(b, sizeof(b), "%.2f s", decaySeconds(500.0, row));
             globalAlpha(used ? 1.0f : 0.4f);
-            plateBadge(cx - 50, y, row, used);
-            label(cx + 10, y, 18, plateColor(row), ALIGN_CENTER | ALIGN_MIDDLE, b, 1);
+            plateBadge(kRt.x + 6, y, row, used);
+            label(kRt.x + kRt.w, y, 15, plateColor(row), ALIGN_RIGHT | ALIGN_MIDDLE, b, 1);
             globalAlpha(1.0f);
         }
     }

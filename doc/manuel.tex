@@ -33,7 +33,7 @@
 
 \title{\textcolor{steel}{\textbf{TINPLATE}} \textsf{REVERB}\\[4pt]
 \large Manuel d'utilisation et description de l'algorithme}
-\author{Version 1.3.0}
+\author{Version 1.4.0}
 \date{}
 
 \begin{document}
@@ -74,7 +74,7 @@ l'adaptation aux formats reposent sur DPF (licence ISC).
 % ==============================================================================================
 \section{Installation}
 
-\paragraph{Windows.} Lancer \texttt{Tinplate-Reverb-1.3.0-setup.exe} : il installe le VST3
+\paragraph{Windows.} Lancer \texttt{Tinplate-Reverb-1.4.0-setup.exe} : il installe le VST3
 (obligatoire) et, si on les coche, le CLAP et les manuels (français et anglais), puis ajoute
 un désinstalleur (\og Programmes et fonctionnalités\fg). À la main, copier :
 \begin{itemize}
@@ -147,7 +147,7 @@ bulle d'aide au survol ; pour un bouton, son titre donne la valeur détaillée.
   l'ordinateur, commune à toutes les instances et à tous les projets.
 \item[RANDOM.] Tire au hasard les réglages qui font le son, chacun sur toute la course de son
   bouton (logarithmique compris) : Bandwidth, Tail, Damping et Size des deux plaques, Split,
-  Depth, Rate, Pre-delay, Low cut, High cut, Width, Mono bass. Les niveaux (Dry, Reverb, Output,
+  Depth, Rate, Smooth, Pre-delay, Low cut, High cut, Width, Mono bass. Les niveaux (Dry, Reverb, Output,
   Link, Mix), le ducking, Clear, Sync, Stereo input, Freeze et Bypass sont gardés. Le résultat
   s'affiche comme le préréglage \og Random\fg ; A | B permet de le comparer au réglage précédent.
 \item[ACTIVE / BYPASSED.] Le Bypass déclaré à l'hôte (section~\ref{sec:lissage}).
@@ -168,7 +168,7 @@ fréquence d'échantillonnage courante, \og open\fg{} quand il reste au-dessus d
 jusqu'à la fréquence de Nyquist), \ctl{TAIL} (sous lui, le temps de réverbération à 500\,Hz)
 et \ctl{SIZE} (taille de la plaque). La ligne d'une plaque qui ne reçoit rien (Split à 0 ou
 100\,\%) est grisée. Dessous, communs aux deux plaques, \ctl{DEPTH} et \ctl{RATE} (profondeur et
-vitesse de la modulation) ; Tail, Damping, Depth et Rate sont grisés pendant le gel, où ils
+vitesse de la modulation) et \ctl{SMOOTH} (fin de queue lissée) ; Tail, Damping, Depth et Rate sont grisés pendant le gel, où ils
 n'agissent plus. À droite, le temps de réverbération (RT60) à 500\,Hz de chaque plaque, dans sa
 couleur (\og infinite\fg{} pendant le gel).
 
@@ -259,6 +259,7 @@ Damping B & 0--1 & 0,75 & plaque B : passe-bas dans la boucle \\
 Size B & 50--200\,\% & 150\,\% & plaque B : taille \\
 Depth & 0--200\,\% & 100\,\% & profondeur de la modulation (100\,\% : l'original) \\
 Rate & 0,1--5\,Hz & 1,2\,Hz & vitesse de la modulation (1,2\,Hz : l'original) \\
+Smooth & 0--100\,\% & 0\,\% & fin de queue sans battements (0 : l'original) \\
 Freeze & oui/non & non & réverbération tenue sans fin \\
 Dry & off--+6\dB & 0\dB & niveau du son direct \\
 Link & oui/non & non & Dry et Reverb liés comme le Blend de l'original \\
@@ -346,6 +347,17 @@ de la queue ondule), Rate sa vitesse (lente : flottement ; rapide : vibrato). Au
 l'original, 100\,\% et 1,2\,Hz, le son est celui de l'original au bit près. Un changement
 de vitesse garde la phase de l'oscillateur : pas de clic. Le temps de réverbération affiché est
 mesuré à Depth 100\,\% : à Depth 0, l'aigu tient un peu plus longtemps.
+
+\paragraph{Smooth.} À la fin d'une longue réverbération, la plaque de l'original laisse entendre
+des vaguelettes de volume régulières, une trentaine par seconde (battements à 11 et 33\,Hz),
+d'autant plus nettes que la queue est sombre et que l'on écoute loin dans la queue. Smooth les
+efface : à 100\,\%, leur part régulière est divisée par 1,5 à 2,5 entre $-40$ et $-80$\dB{}
+(section~\ref{sec:smooth}). Le temps de réverbération à 500\,Hz ne change pas (Tail est
+compensé), mais le timbre de la queue, si : un peu plus granuleuse, moins \og chantante\fg ; et
+sous $-50$\dB{} la queue s'éteint un peu plus vite (les fréquences qui traînaient ne traînent
+plus). Le
+réglage agit surtout au-dessus de 50\,\%. À 0 (défaut), le son est celui de l'original au bit
+près. Commun aux deux plaques ; un changement passe en 20\,ms.
 
 \paragraph{Damping.} Passe-bas du premier ordre dans la boucle : à chaque tour, les aigus perdent
 un peu plus que les graves, si bien qu'ils s'éteignent plus tôt (son plus sombre, plus
@@ -644,6 +656,37 @@ ce glissement seulement, les lectures sont interpolées linéairement (d'où le 
 de hauteur). Avec Clear, la plaque vide qui prend le relais passe tout de suite à la taille
 courante.
 
+\paragraph{Lissage de la queue (Smooth).}\label{sec:smooth} Un passe-tout de longueur $m$ et de
+coefficient $g$ retarde les fréquences de façon inégale : son retard de groupe va de
+$m\,(1-g)/(1+g)$ à $m\,(1+g)/(1-g)$, avec un maximum toutes les $1/m$ en fréquence. À $g \approx
+0{,}72$, celui de 89,2\,ms de la moitié droite retarde certaines fréquences de 14\,ms seulement
+et d'autres de 570\,ms. Ces dernières font moins de tours de boucle par seconde, donc perdent
+moins vite leur énergie : à la fin de la queue il ne reste qu'un peigne de fréquences espacées de
+11\,Hz (et de 33\,Hz pour le passe-tout modulé de 30,5\,ms), dont le niveau bat à ces
+fréquences. Smooth ($s$ de 0 à 1) abaisse les quatre coefficients du réservoir de 0,723 et
+0,729 vers 0,5 (linéairement en $s$), ce qui rend le retard de groupe plus régulier, et rend la
+densité d'échos perdue par deux courts passe-tout ajoutés à la sortie de chacun des quatre
+retards (3,1 et 4,7 ; 2,3 et 5,3 ; 3,7 et 4,3 ; 2,9 et 5,9\,ms ; coefficients $\pm 0{,}5\,s^3$,
+de signes alternés ; leur longueur ne suit pas Size). Ouverts linéairement, ces courts
+passe-tout aggravaient les battements à mi-course (mesuré) : d'où $s^3$. Les retards sont
+raccourcis d'autant : à $s = 0$, les courts passe-tout sont de simples retards et la boucle est
+exactement celle de l'original (au bit près, tant que Size ne glisse pas ; après un glissement,
+la sortie s'écarte de celle de 1.3.0 par l'interpolation). Les fréquences les plus retardées
+ne dominant plus la fin de queue, la réverbération est plus courte pour un même Tail (de 15 à
+40\,\% à $s = 1$) : le greffon donne à la plaque un Tail plus grand, tiré d'une seconde table
+mesurée (section~\ref{sec:rt60}) ; figure~\ref{fig:smooth}.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig_smooth.pdf}
+\caption{Smooth, sur une longue queue : niveau de la réponse impulsionnelle (en haut ; même
+temps de réverbération à 500\,Hz, mais sous $-50$\dB{} la queue lissée s'éteint plus vite) et
+spectre moyen de l'ondulation de ce niveau entre $-40$ et $-80$\dB{} (en bas). À Smooth 0, la
+raie de 33\,Hz (et celles de 11 et 67\,Hz) est le battement entendu ; à 100\,\%, il n'en reste
+qu'un grain sans hauteur.}
+\label{fig:smooth}
+\end{figure}
+
 \paragraph{Lois des réglages.} Ce sont celles de l'original (figure~\ref{fig:lois}), avec $p$ la
 valeur du bouton (Tail jusqu'à 1,16) :
 \[
@@ -710,6 +753,13 @@ Tail, au milieu selon Damping, à droite selon Size.}
 
 La figure~\ref{fig:rt60} montre les deux rôles : Tail allonge la réverbération à toutes les
 fréquences ; Damping raccourcit surtout l'aigu et laisse le grave presque inchangé.
+
+\paragraph{Avec Smooth.} Une seconde table donne le RT60 à 500\,Hz pour Smooth 0, 0,25, 0,5,
+0,75 et 1, 4 tailles, 27 valeurs de Tail (0 à 1,3) et 9 de Damping
+(\texttt{plugin/Rt60SmoothTable.hpp}, outil \texttt{tools/rt60\_smooth\_table.cpp}). Le
+greffon y cherche le RT60 de Tail à Smooth 0, puis le Tail qui donne ce même RT60 au Smooth
+courant (interpolation linéaire, première solution en montant) : le temps affiché, mesuré à
+Smooth 0, reste juste. Aux autres fréquences, l'écart est de quelques pour cent.
 
 \subsection{Tonalité : Bandwidth, Low cut et High cut}
 

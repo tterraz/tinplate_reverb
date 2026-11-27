@@ -50,6 +50,8 @@ enum TinplateParam {
     kParamTail2,          // plate B: tail
     kParamDamping2,       // plate B: damping
     kParamSize2,          // plate B: size, %
+    kParamSmooth,         // smoothness of the tail, % (0: the original): lower coefficients of the
+                          // allpasses of the tank, short allpasses added, tail compensated (both plates)
     kParamFreeze,         // infinite tail: input of the tank closed, no loss in the tank (0/1)
     kParamBypass,         // host bypass
     // outputs
@@ -104,6 +106,7 @@ static const TinplateRange kTinplateRanges[kParamCount] = {
     {   0.0f,   1.16f,   0.5f },    // plate B: tail
     {   0.0f,    1.0f,  0.75f },    // plate B: damping
     {  50.0f,  200.0f, 150.0f },    // plate B: size, % (larger than plate A by default)
+    {   0.0f,  100.0f,   0.0f },    // smooth, % (0 = the original)
     {   0.0f,    1.0f,   0.0f },    // freeze
     {   0.0f,    1.0f,   0.0f },    // bypass
     { -60.0f,    6.0f, -60.0f },    // meter in
@@ -124,7 +127,7 @@ static const float kMonoBassOff = 20.0f;   // mono bass at its minimum: no filte
 static const float kPredelayMaxMs = 2000.0f;   // longest pre-delay, locked to the tempo (1/4 at 30 BPM)
 
 // ------------------------------------------------------------------------------------------------
-// Factory presets: values of the parameters kParamBandwidth .. kParamSize2 (freeze and bypass
+// Factory presets: values of the parameters kParamBandwidth .. kParamSmooth (freeze and bypass
 // excluded).
 
 static const int kPresetParamCount = kParamFreeze;
@@ -138,59 +141,59 @@ static const TinplatePreset kTinplatePresets[] = {
     //                      bandw  tail  damp   size   depth  rate  wet   dry   link  mix   pre   lowcut hicut  width  out
     //                      duck  thresh  att  rel  clear  floor  trigger  fade  window
     //                      stereo  monobass  sync  note
-    //                      split  bandwB  tailB  dampB  sizeB (plate B: plate A with a size x 1.5, split 0)
+    //                      split  bandwB  tailB  dampB  sizeB (plate B: plate A with a size x 1.5, split 0)  smooth
     { "Default",          { 0.80f, 0.55f, 0.40f, 100.0f, 100.0f, 1.2f, -16.0f, -1.5f, 0.0f, 0.30f, 12.0f, 60.0f, 20000.0f,
                             100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
                             0.0f, 20.0f, 0.0f, 6.0f,
-                            0.0f, 0.80f, 0.55f, 0.40f, 150.0f } },
+                            0.0f, 0.80f, 0.55f, 0.40f, 150.0f, 0.0f } },
     { "Original (CAPS)",  { 0.50f, 0.50f, 0.75f, 100.0f, 100.0f, 1.2f, -18.4f, -1.1f, 0.0f, 0.25f, 0.0f, 20.0f, 20000.0f,
                             100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
                             0.0f, 20.0f, 0.0f, 6.0f,
-                            0.0f, 0.50f, 0.50f, 0.75f, 150.0f } },
+                            0.0f, 0.50f, 0.50f, 0.75f, 150.0f, 0.0f } },
     { "Vocal plate",      { 0.85f, 0.45f, 0.45f, 100.0f, 100.0f, 1.2f, -18.4f, -1.1f, 0.0f, 0.25f, 35.0f, 150.0f, 20000.0f,
                             110.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
                             0.0f, 20.0f, 0.0f, 6.0f,
-                            0.0f, 0.85f, 0.45f, 0.45f, 150.0f } },
+                            0.0f, 0.85f, 0.45f, 0.45f, 150.0f, 0.0f } },
     { "Drum plate",       { 0.90f, 0.30f, 0.30f, 100.0f, 100.0f, 1.2f, -20.1f, -0.9f, 0.0f, 0.22f, 5.0f, 200.0f, 20000.0f,
                             120.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
                             0.0f, 20.0f, 0.0f, 6.0f,
-                            0.0f, 0.90f, 0.30f, 0.30f, 150.0f } },
+                            0.0f, 0.90f, 0.30f, 0.30f, 150.0f, 0.0f } },
     { "Ambience",         { 0.70f, 0.15f, 0.50f, 100.0f, 100.0f, 1.2f, -21.4f, -0.8f, 0.0f, 0.20f, 0.0f, 100.0f, 20000.0f,
                             130.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
                             0.0f, 20.0f, 0.0f, 6.0f,
-                            0.0f, 0.70f, 0.15f, 0.50f, 150.0f } },
+                            0.0f, 0.70f, 0.15f, 0.50f, 150.0f, 0.0f } },
     { "Dark and long",    { 0.55f, 0.85f, 0.75f, 100.0f, 100.0f, 1.2f, -14.0f, -1.9f, 0.0f, 0.35f, 20.0f, 60.0f, 20000.0f,
                             100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
                             0.0f, 20.0f, 0.0f, 6.0f,
-                            0.0f, 0.55f, 0.85f, 0.75f, 150.0f } },
+                            0.0f, 0.55f, 0.85f, 0.75f, 150.0f, 0.0f } },
     { "Bright and wide",  { 1.00f, 0.70f, 0.10f, 100.0f, 100.0f, 1.2f, -16.0f, -1.5f, 0.0f, 0.30f, 15.0f, 120.0f, 20000.0f,
                             150.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
                             0.0f, 20.0f, 0.0f, 6.0f,
-                            0.0f, 1.00f, 0.70f, 0.10f, 150.0f } },
+                            0.0f, 1.00f, 0.70f, 0.10f, 150.0f, 0.0f } },
     { "Send (100 % wet)", { 0.80f, 0.60f, 0.40f, 100.0f, 100.0f, 1.2f, 0.0f, -60.0f, 0.0f, 1.00f, 20.0f, 100.0f, 20000.0f,
                             100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
                             0.0f, 20.0f, 0.0f, 6.0f,
-                            0.0f, 0.80f, 0.60f, 0.40f, 150.0f } },
+                            0.0f, 0.80f, 0.60f, 0.40f, 150.0f, 0.0f } },
     { "Ducked vocal",     { 0.85f, 0.65f, 0.45f, 100.0f, 100.0f, 1.2f, -14.0f, -1.9f, 0.0f, 0.35f, 25.0f, 150.0f, 20000.0f,
                             110.0f, 0.0f, 12.0f, -30.0f, 10.0f, 400.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
                             0.0f, 20.0f, 0.0f, 6.0f,
-                            0.0f, 0.85f, 0.65f, 0.45f, 150.0f } },
+                            0.0f, 0.85f, 0.65f, 0.45f, 150.0f, 0.0f } },
     { "Piano (clear)",    { 0.80f, 0.70f, 0.45f, 120.0f, 100.0f, 1.2f, -16.0f, -1.5f, 1.0f, 0.30f, 15.0f, 80.0f, 20000.0f,
                             120.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 1.0f, -50.0f, -20.0f, 120.0f, 40.0f,
                             1.0f, 20.0f, 0.0f, 6.0f,
-                            0.0f, 0.80f, 0.70f, 0.45f, 180.0f } },
+                            0.0f, 0.80f, 0.70f, 0.45f, 180.0f, 0.0f } },
     { "Snare (clear)",    { 0.95f, 0.50f, 0.25f, 90.0f, 100.0f, 1.2f, -18.4f, -1.1f, 1.0f, 0.25f, 0.0f, 200.0f, 12000.0f,
                             130.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 1.0f, -45.0f, -15.0f, 40.0f, 10.0f,
                             0.0f, 20.0f, 1.0f, 3.0f,
-                            0.0f, 0.95f, 0.50f, 0.25f, 135.0f } },
+                            0.0f, 0.95f, 0.50f, 0.25f, 135.0f, 0.0f } },
     { "Guitar (stereo)",  { 0.80f, 0.60f, 0.40f, 110.0f, 120.0f, 0.8f, -16.9f, -1.3f, 1.0f, 0.28f, 20.0f, 120.0f, 20000.0f,
                             140.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
                             1.0f, 150.0f, 0.0f, 6.0f,
-                            0.0f, 0.80f, 0.60f, 0.40f, 165.0f } },
+                            0.0f, 0.80f, 0.60f, 0.40f, 165.0f, 0.0f } },
     { "Two plates",       { 0.90f, 0.35f, 0.25f, 70.0f, 100.0f, 1.2f, -16.0f, -1.5f, 0.0f, 0.30f, 15.0f, 100.0f, 20000.0f,
                             120.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
                             0.0f, 20.0f, 0.0f, 6.0f,
-                            50.0f, 0.60f, 0.75f, 0.65f, 170.0f } },
+                            50.0f, 0.60f, 0.75f, 0.65f, 170.0f, 0.0f } },
 };
 
 static const int kTinplatePresetCount = sizeof(kTinplatePresets) / sizeof(kTinplatePresets[0]);

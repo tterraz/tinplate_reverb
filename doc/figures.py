@@ -131,14 +131,16 @@ def rt60(tail, damping, f, fs=44100.0, size=1.0):
 
 # ---------------------------------------------------------------------------------- the plate
 
-def impulse(bandwidth, tail, damping, seconds, sr=44100.0, left=False):
+def impulse(bandwidth, tail, damping, seconds, sr=44100.0, left=False, smooth=0.0):
     exe = os.path.join(ROOT, "build", "impulse")
     src = os.path.join(ROOT, "tools", "impulse.cpp")
-    if not os.path.exists(exe) or os.path.getmtime(exe) < os.path.getmtime(src):
+    deps = [src] + [os.path.join(ROOT, "plugin", h) for h in ("PlateCore.hpp", "Smooth.hpp", "Rt60SmoothTable.hpp")]
+    if not os.path.exists(exe) or os.path.getmtime(exe) < max(os.path.getmtime(d) for d in deps):
         os.makedirs(os.path.dirname(exe), exist_ok=True)
         subprocess.run(["g++", "-O2", "-std=gnu++17", "-I" + os.path.join(ROOT, "plugin"), src, "-o", exe],
                        check=True)
     args = [exe, "%g" % sr, "%g" % seconds, "%g" % bandwidth, "%g" % tail, "%g" % damping] + (["left"] if left else [])
+    args += ["smooth=%g" % smooth] if smooth > 0.0 else []
     raw = subprocess.run(args, check=True, capture_output=True).stdout
     ir = np.frombuffer(raw, dtype=np.float32).reshape(-1, 2).astype(float)
     return ir[:, 0], ir[:, 1]
@@ -317,6 +319,49 @@ def fig_stereo():
     save(fig, "fig_stereo.pdf")
 
 
+def fig_smooth():
+    """Level of the tail, Smooth 0 and 100 %, and the spectrum of the waves of its level."""
+    sr = 44100.0
+    win = int(0.005 * sr)
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7.2, 4.6))
+    for smooth, col, name in ((0.0, GREY, T("Smooth 0 (l'original)", "Smooth 0 (the original)")),
+                              (1.0, STEEL, "Smooth 100 %")):
+        l, r = impulse(0.8, 0.9, 0.2, 10.0, sr, smooth=smooth)
+        s = l + r
+        n = len(s) // win
+        lev = 10.0 * np.log10((s[:n * win] ** 2).reshape(n, win).mean(axis=1) + 1e-300)
+        lev -= lev[20:40].mean()
+        t = (np.arange(n) + 0.5) * win / sr
+        ax1.plot(t, lev, color=col, lw=0.6, label=name)
+        # waves of the level, as tools/ripple_measure.hpp: segments of 1 s between -40 and -80 dB,
+        # level minus a quadratic fit, Hann window; mean power spectrum
+        seg, spec = 200, []
+        for a in range(50, n - seg, 50):
+            m = lev[a:a + seg].mean()
+            if m > -40.0 or m < -80.0:
+                continue
+            tt = np.linspace(-1.0, 1.0, seg)
+            y = lev[a:a + seg] - np.polyval(np.polyfit(tt, lev[a:a + seg], 2), tt)
+            spec.append(np.abs(np.fft.rfft(y * np.hanning(seg))) ** 2)
+        f = np.fft.rfftfreq(seg, 0.005)
+        ax2.plot(f, 10.0 * np.log10(np.mean(spec, axis=0)), color=col, lw=1.0, label=name)
+    ax1.set_xlim(0, 6)
+    ax1.set_ylim(-100, 5)
+    ax1.set_xlabel(T("temps (s)", "time (s)"))
+    ax1.set_ylabel(T("niveau (dB)", "level (dB)"))
+    ax1.legend(fontsize=7.5)
+    ax1.set_title(T("Niveau de la réponse impulsionnelle par tranches de 5 ms (Bandwidth 0,8, Tail 0,9, Damping 0,2)",
+                    "Level of the impulse response in slices of 5 ms (Bandwidth 0.8, Tail 0.9, Damping 0.2)"),
+                  fontsize=9)
+    ax2.set_xlim(0, 90)
+    ax2.set_xlabel(T("fréquence de l'ondulation du niveau (Hz)", "frequency of the waves of the level (Hz)"))
+    ax2.set_ylabel(T("puissance (dB)", "power (dB)"))
+    ax2.legend(fontsize=7.5, loc="lower left", ncol=2)
+    ax2.set_title(T("Ondulation du niveau entre -40 et -80 dB : spectre moyen", "Waves of the level between -40 and "
+                    "-80 dB: mean spectrum"), fontsize=9)
+    save(fig, "fig_smooth.pdf")
+
+
 if __name__ == "__main__":
     for LANG in ("fr", "en"):
         fig_lois()
@@ -325,3 +370,4 @@ if __name__ == "__main__":
         fig_ton()
         fig_duck()
         fig_stereo()
+        fig_smooth()

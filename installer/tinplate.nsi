@@ -7,7 +7,7 @@ Unicode true
 !include "x64.nsh"
 
 !define NAME     "Tinplate Reverb"
-!define VERSION  "1.3.0"
+!define VERSION  "1.4.0"
 !define BUNDLE   "tinplate_reverb"
 !define MANUAL   "Tinplate-Reverb-manuel.pdf"
 !define MANUAL_EN "Tinplate-Reverb-manual.pdf"

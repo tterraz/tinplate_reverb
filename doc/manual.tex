@@ -33,7 +33,7 @@
 
 \title{\textcolor{steel}{\textbf{TINPLATE}} \textsf{REVERB}\\[4pt]
 \large User manual and description of the algorithm}
-\author{Version 1.3.0}
+\author{Version 1.4.0}
 \date{}
 
 \begin{document}
@@ -73,7 +73,7 @@ plugin formats rely on DPF (ISC licence).
 % ==============================================================================================
 \section{Installation}
 
-\paragraph{Windows.} Run \texttt{Tinplate-Reverb-1.3.0-setup.exe}: it installs the VST3
+\paragraph{Windows.} Run \texttt{Tinplate-Reverb-1.4.0-setup.exe}: it installs the VST3
 (required) and, if ticked, the CLAP and the user manuals, then adds an uninstaller (\emph{Apps
 and features}). By hand: copy the folder \texttt{tinplate\_reverb.vst3} into
 \verb|C:\Program Files\Common Files\VST3\| and \texttt{tinplate\_reverb.clap} into
@@ -144,7 +144,7 @@ the detailed value.
   sound; it is a preference of the computer, shared by all instances and all projects.
 \item[RANDOM.] Draws the settings that make the sound at random, each over the whole travel of
   its knob (logarithmic ones too): Bandwidth, Tail, Damping and Size of both plates, Split,
-  Depth, Rate, Pre-delay, Low cut, High cut, Width, Mono bass. The levels (Dry, Reverb, Output,
+  Depth, Rate, Smooth, Pre-delay, Low cut, High cut, Width, Mono bass. The levels (Dry, Reverb, Output,
   Link, Mix), the ducking, Clear, Sync, Stereo input, Freeze and Bypass are kept. The result is
   shown as the preset ``Random''; A | B compares it with the previous settings.
 \item[ACTIVE / BYPASSED.] The Bypass declared to the host (section~\ref{sec:smoothing}).
@@ -164,7 +164,8 @@ One row per plate, marked with its badge, \ctl{A} in brass and \ctl{B} in copper
 current sample rate, ``open'' when it stays above $-3$\dB{} up to the Nyquist frequency),
 \ctl{TAIL} (under it, the decay time at 500\,Hz) and \ctl{SIZE} (size of the plate). The row of a
 plate that gets nothing (Split at 0 or 100\,\%) is greyed. Below, shared by both plates,
-\ctl{DEPTH} and \ctl{RATE} (depth and rate of the modulation); Tail, Damping, Depth and Rate are
+\ctl{DEPTH} and \ctl{RATE} (depth and rate of the modulation) and \ctl{SMOOTH} (smoothed end of
+the tail); Tail, Damping, Depth and Rate are
 greyed while frozen, when they no longer act. On the right, the decay time (RT60) at 500\,Hz of
 each plate, in its colour (``infinite'' while frozen).
 
@@ -253,6 +254,7 @@ Damping B & 0--1 & 0.75 & plate B: low-pass inside the loop \\
 Size B & 50--200\,\% & 150\,\% & plate B: size \\
 Depth & 0--200\,\% & 100\,\% & depth of the modulation (100\,\%: the original) \\
 Rate & 0.1--5\,Hz & 1.2\,Hz & rate of the modulation (1.2\,Hz: the original) \\
+Smooth & 0--100\,\% & 0\,\% & end of the tail without beats (0: the original) \\
 Freeze & on/off & off & reverb held forever \\
 Dry & off--+6\dB & 0\dB & level of the direct sound \\
 Link & on/off & off & Dry and Reverb linked as the Blend of the original \\
@@ -336,6 +338,15 @@ wavers), Rate its speed (slow: floating; fast: vibrato). At the values of the or
 100\,\% and 1.2\,Hz, the sound is that of the original to the bit. A change of rate keeps the
 phase of the oscillator: no click. The decay time shown is measured at Depth 100\,\%: at
 Depth 0, the highs last a little longer.
+
+\paragraph{Smooth.} At the end of a long reverb, the plate of the original lets regular small
+waves of level be heard, some thirty a second (beats at 11 and 33\,Hz), the clearer the darker
+the tail and the further into it one listens. Smooth removes them: at 100\,\%, their regular
+part is divided by 1.5 to 2.5 between $-40$ and $-80$\dB{} (section~\ref{sec:smooth}). The
+decay time at 500\,Hz does not change (Tail is compensated), but the colour of the tail does: a
+little grainier, less ``singing''; and below $-50$\dB{} the tail dies a little sooner (the
+frequencies that lingered no longer linger). The control acts mostly above 50\,\%. At 0 (default), the
+sound is that of the original to the bit. Shared by both plates; a change takes 20\,ms.
 
 \paragraph{Damping.} First-order low-pass inside the loop: at each round, the highs lose a
 little more than the lows, so they die sooner (a darker, more natural sound). At 0, the loop
@@ -628,6 +639,35 @@ length grows about as the size. When Size changes, each length goes linearly to 
 value in 100\,ms; during this glide only, the reads are linearly interpolated (hence the brief
 pitch glide). With Clear, the empty plate that takes over goes at once to the current size.
 
+\paragraph{Smoothing of the tail (Smooth).}\label{sec:smooth} An allpass of length $m$ and
+coefficient $g$ delays the frequencies unevenly: its group delay goes from $m\,(1-g)/(1+g)$ to
+$m\,(1+g)/(1-g)$, with a peak every $1/m$ in frequency. At $g \approx 0.72$, the 89.2\,ms one of
+the right half delays some frequencies by only 14\,ms and others by 570\,ms. The latter make
+fewer rounds of the loop per second, so they lose their energy more slowly: at the end of the
+tail only a comb of frequencies 11\,Hz apart is left (and 33\,Hz for the 30.5\,ms modulated
+allpass), whose level beats at those rates. Smooth ($s$ from 0 to 1) lowers the four
+coefficients of the tank from 0.723 and 0.729 towards 0.5 (linearly in $s$), which makes the
+group delay more even, and gives back the lost density of echoes by two short allpasses added at
+the output of each of the four delays (3.1 and 4.7; 2.3 and 5.3; 3.7 and 4.3; 2.9 and 5.9\,ms;
+coefficients $\pm 0.5\,s^3$, of alternate signs; their length does not follow Size). Opened
+linearly, these short allpasses made the beats worse half way (measured): hence $s^3$. The
+delays are shortened by as much: at $s = 0$, the short allpasses are plain delays and the loop
+is exactly that of the original (to the bit, as long as Size does not glide; after a glide, the
+output departs from that of 1.3.0 through the interpolation). As the most delayed frequencies no
+longer rule the end of the tail, the reverb is shorter for the same Tail (by 15 to 40\,\% at
+$s = 1$): the plugin gives the plate a larger Tail, taken from a second measured table
+(section~\ref{sec:rt60}); figure~\ref{fig:smooth}.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{fig_smooth_en.pdf}
+\caption{Smooth, on a long tail: level of the impulse response (top; same decay time at
+500\,Hz, but below $-50$\dB{} the smoothed tail dies sooner) and mean spectrum of the waves of
+that level between $-40$ and $-80$\dB{} (bottom). At Smooth 0, the line at 33\,Hz (and those at
+11 and 67\,Hz) is the beat heard; at 100\,\%, only a pitchless grain is left.}
+\label{fig:smooth}
+\end{figure}
+
 \paragraph{Laws of the controls.} These are those of the original (figure~\ref{fig:laws}), with
 $p$ the value of the knob (Tail up to 1.16):
 \[
@@ -691,6 +731,13 @@ middle against Damping, right against Size.}
 
 Figure~\ref{fig:rt60} shows the two roles: Tail lengthens the reverb at all frequencies;
 Damping mostly shortens the highs and leaves the lows nearly unchanged.
+
+\paragraph{With Smooth.} A second table gives the RT60 at 500\,Hz for Smooth 0, 0.25, 0.5, 0.75
+and 1, 4 sizes, 27 values of Tail (0 to 1.3) and 9 of Damping
+(\texttt{plugin/Rt60SmoothTable.hpp}, tool \texttt{tools/rt60\_smooth\_table.cpp}). The plugin
+looks up the RT60 of Tail at Smooth 0, then the Tail giving that same RT60 at the current Smooth
+(linear interpolation, first solution going up): the time shown, measured at Smooth 0, stays
+right. At other frequencies, the gap is a few percent.
 
 \subsection{Tone: Bandwidth, Low cut and High cut}
 

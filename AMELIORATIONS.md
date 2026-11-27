@@ -70,3 +70,23 @@ demandera un nouveau numéro de version. Détails de l'existant : `LISEZMOI.md`.
   deux plaques, Split, Depth, Rate, Pre-delay, Low cut, High cut, Width, Mono bass ; niveaux, Link,
   ducking, Clear, Sync, Stereo input, Freeze et Bypass gardés. Tirage vu en démonstration ; pas
   essayé au clic.
+
+## 1.4.0 (session 78, 2026-11-27, non publiée)
+- **R. Smooth (fin de queue sans vaguelettes)** : **fait** (demande de l'utilisateur : ondulation
+  de volume en fin de queue ; « diffusion » demandée, B + C accordés).
+  - Mesure (C) : `tools/ripple.cpp`, `tools/ripple_measure.hpp` (niveau par 5 ms, écart à une
+    parabole sur 1 s, part de la raie la plus forte entre 3 et 90 Hz ; « ondulation périodique » =
+    écart RMS × racine de cette part). Original : battements à 33 et 11 Hz, nets sous -40 dB
+    (1,3 dB à -40/-80 dB pour Bandwidth 0,5, Tail 0,5, Damping 0,75).
+  - Cause : retard de groupe des passe-tout de la boucle (g ≈ 0,72) de 0,16 m à 6,2 m, pic toutes
+    les 1/m ; ces fréquences font moins de tours par seconde et survivent : peigne en fin de queue.
+    La modulation n'y est pour rien (Depth 0 : même battement). Des passe-tout longs ajoutés
+    l'aggraveraient (prototype : gain faible) ; baisser les coefficients le traite.
+  - Fait : coefficients 0,723/0,729 → 0,5 et 2 courts passe-tout par retard (± 0,5 s³ ; ouverts
+    linéairement, ils aggravaient l'ondulation à mi-course, mesuré) ; Tail compensé par table
+    mesurée. À 100 % : ondulation périodique tardive 1,30 → 0,90, 0,93 → 0,56, 1,25 → 0,54 dB
+    (test 21) ; à 50 % le gain est surtout pour les queues longues et claires.
+  - Prix : queue un peu plus granuleuse ; sous -50 dB elle s'éteint plus vite (RT60 tenu) ; calcul
+    +46 % à Smooth > 0 (0,9 % d'un cœur à 44,1 kHz), rien à Smooth 0 (contournement exact).
+  - Non fait : réglage à l'oreille de 0,5 et des longueurs ; Smooth dans des préréglages d'usine
+    (tous à 0).

@@ -50,6 +50,10 @@
  *     1 dB); Split moved while playing: no click; a plate stopped (send 0, tail died away), its
  *     settings changed, started again: the output of a fresh plugin (residue of plate A only);
  *     Clear with both plates: after the fade, the output of a fresh plugin.
+ * 21. Smooth (Smooth 0 is the original: test 1): at 100 %, the decay time at 500 Hz measured on
+ *     the impulse response == the value shown (measured at Smooth 0, Tail compensated), within
+ *     10 %; the periodic ripple of the end of the tail (tools/ripple_measure.hpp) at most 0.7 times
+ *     that of Smooth 0; Smooth moved while playing: no click.
  */
 #include "src/DistrhoPluginInternal.hpp"
 #include "src/DistrhoPlugin.cpp"
@@ -58,6 +62,7 @@
 #include "caps_reference.hpp"
 #include "../plugin/Rt60.hpp"
 #include "../tools/rt60_measure.hpp"
+#include "../tools/ripple_measure.hpp"
 
 #include <cstdio>
 #include <cstring>
@@ -1062,6 +1067,75 @@ int main()
             d = std::max(d, std::max<double>(std::fabs(oL[i] - rL[i - A]), std::fabs(oR[i] - rR[i - A])));
         std::snprintf(buf, sizeof(buf), "clear, Split 50: after the fade, gap to a fresh plugin %.1e", d / peakOf(rL));
         check(d / peakOf(rL) < 1e-5, buf);
+    }
+
+    // 21. smooth -------------------------------------------------------------------------------
+    std::printf("21. smooth\n");
+    {
+        struct { double sr; float tail, damping, size; } cases[] = {
+            { 44100.0, 0.50f, 0.75f, 1.0f }, { 44100.0, 0.30f, 0.20f, 1.0f }, { 44100.0, 0.90f, 0.20f, 1.0f },
+            { 44100.0, 1.16f, 0.00f, 1.0f }, { 44100.0, 0.65f, 0.50f, 0.75f }, { 44100.0, 0.80f, 0.40f, 1.75f },
+            { 96000.0, 0.55f, 0.60f, 1.0f }, { 96000.0, 1.10f, 1.00f, 1.3f },
+        };
+        for (const auto& c : cases)
+        {
+            std::vector<float> imp(static_cast<size_t>(24.0 * c.sr), 0.0f);
+            imp[0] = 1.0f;
+            Settings s = originalSettings(1.0f, c.tail, c.damping, 1.0f);
+            s.values[kParamSize] = c.size * 100.0f;
+            s.values[kParamSmooth] = 100.0f;
+            process(s, c.sr, imp, imp, oL, oR);
+            const double measured = measureRt60(oL, oR, 500.0, c.sr);
+            const double shown = TinplateRt60::seconds(c.tail, c.damping, c.size, 500.0, c.sr);
+            char buf[160];
+            std::snprintf(buf, sizeof(buf),
+                          "smooth 100 %%, %.0f kHz, tail %.2f damping %.2f size %3.0f %%: RT60 measured %.2f s, shown %.2f s",
+                          c.sr / 1000.0, c.tail, c.damping, c.size * 100.0f, measured, shown);
+            check(measured > 0.0 && std::fabs(shown / measured - 1.0) < 0.10, buf);
+        }
+
+        // periodic ripple of the end of the tail
+        const float settings[][3] = { { 0.5f, 0.5f, 0.75f }, { 0.8f, 0.55f, 0.40f }, { 0.8f, 0.9f, 0.2f } };
+        for (const auto& c : settings)
+        {
+            std::vector<float> imp(static_cast<size_t>(12.0 * sr), 0.0f);
+            imp[0] = 1.0f;
+            Settings s = originalSettings(c[0], c[1], c[2], 1.0f);
+            double p[2];
+            for (int k = 0; k < 2; ++k)
+            {
+                s.values[kParamSmooth] = k ? 100.0f : 0.0f;
+                process(s, sr, imp, imp, oL, oR);
+                p[k] = periodicRipple(oL, oR, sr, -40.0, -80.0);
+            }
+            char buf[160];
+            std::snprintf(buf, sizeof(buf), "bandwidth %.2f tail %.2f damping %.2f: periodic ripple %.2f dB, smooth 100 %% %.2f dB",
+                          c[0], c[1], c[2], p[0], p[1]);
+            check(p[0] > 0.0 && p[1] < 0.7 * p[0], buf);
+        }
+
+        // Smooth moved while playing
+        std::vector<float> tone(static_cast<size_t>(2.0 * sr));
+        for (size_t i = 0; i < tone.size(); ++i)
+            tone[i] = 0.3f * static_cast<float>(std::sin(2.0 * M_PI * 220.0 * i / sr));
+        const size_t at = static_cast<size_t>(1.0 * sr);
+        const auto maxStep = [&](const std::vector<float>& y, const size_t a, const size_t b) {
+            float m = 0.0f;
+            for (size_t i = a; i < b; ++i)
+                m = std::max(m, std::fabs(y[i] - y[i - 1]));
+            return m;
+        };
+        Settings s = originalSettings(0.8f, 0.6f, 0.4f, 1.0f);
+        process(s, sr, tone, tone, rL, rR);
+        const float steady = maxStep(rL, at, at + static_cast<size_t>(0.3 * sr));
+        process(s, sr, tone, tone, oL, oR, { { at, kParamSmooth, 100.0f } });
+        const float moved = maxStep(oL, at, at + static_cast<size_t>(0.3 * sr));
+        bool finite = true;
+        for (size_t i = 0; i < oL.size(); ++i)
+            finite = finite && std::isfinite(oL[i]) && std::isfinite(oR[i]);
+        char buf[160];
+        std::snprintf(buf, sizeof(buf), "smooth 0 -> 100 %%: largest step %.4f (steady %.4f)", moved, steady);
+        check(finite && moved < 1.5f * steady, buf);
     }
 
     std::printf("%s\n", gFailures == 0 ? "all DSP tests passed" : "DSP TESTS FAILED");

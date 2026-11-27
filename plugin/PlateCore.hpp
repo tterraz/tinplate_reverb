@@ -23,10 +23,23 @@
  * Stereo input (option, processStereo): each channel through its own input filters, into one half
  * of the tank each.
  *
+ * Smooth (setSmooth, 0..1; 0: the original): the allpasses of the tank, with coefficients near
+ * 0.72, delay some frequencies much more than others (group delay from 0.16 to 6.3 times their
+ * length, peaks every 1 / length): those make fewer round trips per second and outlive the others,
+ * so that the end of the tail is a comb of frequencies 11 and 33 Hz apart whose level beats at
+ * those rates.  Smooth lowers the four coefficients towards kSmoothDiff and, to keep the density
+ * of echoes, opens two short allpasses at the read end of each of the four delays (kShortMs, not
+ * scaled by the size; the delays are that much shorter).  At Smooth 0 the short allpasses are
+ * bypassed and the delays have their full length: the original loop and cost.  When Smooth leaves
+ * 0, their memories are filled from that of the delay, as if they had run as the pure delays they
+ * are at Smooth 0 (exact, out of a glide of the size).  The tail is shorter for the same decay:
+ * the caller compensates (TinplateSmooth).
+ *
  * Signal flow (mono input, stereo output):
  *   x -> bandwidth low-pass -> 4 input allpasses (diffusion)
  *     -> two cross-coupled halves, each: modulated allpass -> delay -> damping low-pass
  *        -> x decay -> allpass -> delay -> x decay -> into the other half
+ *     (Smooth: each delay followed by two short allpasses)
  *   output: 6 taps per channel, taken in both halves (signs alternate), x 0.6.
  */
 #ifndef PLATE_CORE_HPP_INCLUDED
@@ -215,6 +228,9 @@ public:
     // diffusion coefficients, "tuned for soft attack, ambience"
     float indiff1 = .742f, indiff2 = .712f, dediff1 = .723f, dediff2 = .729f;
 
+    // Smooth at 1: coefficient of the four allpasses of the tank, and of the short allpasses
+    static constexpr float kSmoothDiff = 0.5f, kShortDiff = 0.5f;
+
     struct Input {
         LP1 bandwidth;
         Lattice lattice[4];
@@ -228,6 +244,7 @@ public:
         Delay delay[4];
         LP1 damping[2];
         int taps[12];
+        Lattice shorts[4][2];   // Smooth: short allpasses at the read end of each delay
     } tank;
 
     static constexpr float kMinSize = 0.5f, kMaxSize = 2.0f;
@@ -267,6 +284,19 @@ public:
         tank.lattice[1].init(L(10), room(10));
         tank.delay[3].init(L(11), room(11));
 
+        // the short allpasses after each delay (Smooth), ms; not scaled by the size
+        static const float kShortMs[4][2] = { { 3.1f, 4.7f }, { 2.3f, 5.3f }, { 3.7f, 4.3f }, { 2.9f, 5.9f } };
+        for (int i = 0; i < 4; ++i)
+        {
+            fShort[i] = 0;
+            for (int j = 0; j < 2; ++j)
+            {
+                const int m = static_cast<int>(kShortMs[i][j] * 1e-3f * fs);
+                tank.shorts[i][j].init(m);
+                fShort[i] += m;
+            }
+        }
+
         static const float t[] = {
             0.0089378717113000241f, 0.099929437854910791f, 0.064278754074123853f,
             0.067067638856221232f, 0.066866032727394914f, 0.006283391015086859f,
@@ -276,7 +306,8 @@ public:
         for (int i = 0; i < 12; ++i)
             tank.taps[i] = static_cast<int>(t[i] * fs);
 
-        // lengths that follow the size: 4 delays, 2 allpasses, 2 modulated allpasses, 12 taps
+        // lengths that follow the size: 4 delays (with their short allpasses), 2 allpasses,
+        // 2 modulated allpasses, 12 taps
         for (int i = 0; i < 4; ++i)
             fBase[i] = static_cast<float>(tank.delay[i].n);
         for (int i = 0; i < 2; ++i)
@@ -332,6 +363,8 @@ public:
         {
             input.lattice[i].reset();
             tank.delay[i].reset();
+            tank.shorts[i][0].reset();
+            tank.shorts[i][1].reset();
         }
         for (int i = 0; i < 2; ++i)
         {
@@ -375,6 +408,26 @@ public:
     {
         tank.damping[0].set(a0);
         tank.damping[1].set(a0);
+    }
+
+    // smoothness of the tail, 0..1 (0: the original coefficients, the short allpasses pure delays);
+    // the four coefficients go linearly to kSmoothDiff, those of the short allpasses as s^3 to
+    // kShortDiff (measured: opened linearly, they make the ripple worse half way)
+    void setSmooth(const float s)
+    {
+        if (s == fSmooth)
+            return;
+        fSmooth = s;
+        dediff1 = s <= 0.0f ? .723f : .723f + s * (kSmoothDiff - .723f);
+        dediff2 = s <= 0.0f ? .729f : .729f + s * (kSmoothDiff - .729f);
+        fShortDiff = s <= 0.0f ? 0.0f : s * s * s * kShortDiff;   // weak, they add beats of their own
+        if ((s > 0.0f) != fShortsOn)
+        {
+            fShortsOn = s > 0.0f;
+            if (fShortsOn)
+                primeShorts();
+            apply();
+        }
     }
 
     // depth of the modulation, 1 = original, up to 2; 0: integer delays, no interpolation loss
@@ -435,12 +488,12 @@ private:
     void tankStep(const float inLeft, const float inRight, const float decay, float* const outL, float* const outR)
     {
         // summation point
-        double xl = inLeft + decay * tank.delay[3].get();
-        double xr = inRight + decay * tank.delay[1].get();
+        double xl = inLeft + decay * delayGet(3);
+        double xr = inRight + decay * delayGet(1);
 
         // lh
         xl = tank.mlattice[0].process(xl, dediff1);
-        xl = tank.delay[0].putget(xl);
+        xl = delayPutGet(0, xl);
         xl = tank.damping[0].process(xl);
         xl *= decay;
         xl = tank.lattice[0].process(xl, dediff2);
@@ -448,7 +501,7 @@ private:
 
         // rh
         xr = tank.mlattice[1].process(xr, dediff1);
-        xr = tank.delay[2].putget(xr);
+        xr = delayPutGet(2, xr);
         xr = tank.damping[1].process(xr);
         xr *= decay;
         xr = tank.lattice[1].process(xr, dediff2);
@@ -493,12 +546,46 @@ private:
         *outR = static_cast<float>(xr);
     }
 
+    // the two short allpasses after delay i (alternate signs; pure delays at Smooth 0)
+    float shorts(const int i, const float x)
+    {
+        return tank.shorts[i][1].process(tank.shorts[i][0].process(x, fShortDiff), -fShortDiff);
+    }
+
+    // output of delay i, through its short allpasses when Smooth is on
+    float delayGet(const int i) { return fShortsOn ? shorts(i, tank.delay[i].get()) : tank.delay[i].get(); }
+
+    // delay i and its short allpasses: x in, the output of the chain out (as Delay::putget)
+    float delayPutGet(const int i, const float x)
+    {
+        const float y = delayGet(i);
+        tank.delay[i].put(x);
+        return y;
+    }
+
+    // Smooth leaves 0: the short allpasses as if they had run as pure delays, the first one fed
+    // the samples of delay i from its shortened length on, the second one the output of the first
+    void primeShorts()
+    {
+        for (int i = 0; i < 4; ++i)
+        {
+            Delay& d = tank.delay[i];
+            unsigned k = static_cast<unsigned>(fLen[i]) - fShort[i];   // shortened length
+            for (Lattice& a : tank.shorts[i])
+            {
+                for (unsigned j = 1; j <= a.n; ++j)
+                    a.data[(a.write - j) & a.size] = d.data[(d.write - k - j) & d.size];
+                k += a.n;
+            }
+        }
+    }
+
     // lengths of the current step into the delays; interpolated reads while they glide
     void apply()
     {
         fGlide = fGlideLeft > 0;
         for (int i = 0; i < 4; ++i)
-            setLength(tank.delay[i], fLen[i]);
+            setLength(tank.delay[i], fShortsOn ? fLen[i] - fShort[i] : fLen[i]);   // the short allpasses: the rest
         for (int i = 0; i < 2; ++i)
         {
             setLength(tank.lattice[i], fLen[4 + i]);
@@ -521,6 +608,9 @@ private:
     double fRate = 1.2;
     double fPhase = 0.0;
     float fSize = 1.0f;
+    float fSmooth = 0.0f, fShortDiff = 0.0f;
+    bool fShortsOn = false;   // Smooth > 0: the short allpasses in the loop
+    int fShort[4] = {};   // total length of the short allpasses after each delay, samples
     float fBase[kLengths] = {}, fLen[kLengths] = {}, fTarget[kLengths] = {}, fStep[kLengths] = {};
     int fGlideLeft = 0;
     bool fGlide = false;

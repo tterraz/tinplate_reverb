@@ -90,6 +90,7 @@
 #include "DistrhoPlugin.hpp"
 #include "TinplateParams.hpp"
 #include "PlateCore.hpp"
+#include "Smooth.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -319,12 +320,12 @@ protected:
     const char* getDescription() const override
     {
         return "Plate reverb after CAPS PlateX2 (Plate2x2) by Tim Goetze: Dattorro's plate, "
-               "with a second plate in parallel, pre-delay, size, modulation, low and high cut, width, "
+               "with a second plate in parallel, pre-delay, size, smooth, modulation, low and high cut, width, "
                "freeze, ducking and clear.";
     }
     const char* getMaker() const override { return "Tinplate"; }
     const char* getLicense() const override { return "GPL-3.0-or-later"; }
-    uint32_t getVersion() const override { return d_version(1, 3, 0); }
+    uint32_t getVersion() const override { return d_version(1, 4, 0); }
 
     void initParameter(const uint32_t index, Parameter& p) override
     {
@@ -373,6 +374,7 @@ protected:
         case kParamTail2:     set(p, "Tail B", "tail_b", ""); break;
         case kParamDamping2:  set(p, "Damping B", "damping_b", ""); break;
         case kParamSize2:     set(p, "Size B", "size_b", "%"); break;
+        case kParamSmooth:    set(p, "Smooth", "smooth", "%"); break;
         case kParamFreeze:
             set(p, "Freeze", "freeze", "");
             p.hints |= kParameterIsBoolean | kParameterIsInteger;
@@ -557,6 +559,15 @@ protected:
                     line.plate[1].setModulation(v);
                 }
             }
+            if (fSmooth.moving())
+            {
+                const float v = fSmooth.next();
+                for (PlateLine& line : fLines)
+                {
+                    line.plate[0].setSmooth(v);
+                    line.plate[1].setSmooth(v);
+                }
+            }
 
             if (fClearOn || fArmed)
                 detectAttack(std::fmax(std::fabs(sl), std::fabs(sr)));
@@ -721,6 +732,9 @@ private:
         for (PlateLine& line : fLines)
             for (PlateCore::Plate& p : line.plate)
                 p.setModRate(rate);
+        // smooth: the coefficients of the tanks in 20 ms; each tail compensated (Smooth.hpp)
+        const float smooth = std::fmin(std::fmax(fParams[kParamSmooth], 0.0f), 100.0f) * 0.01f;
+        fSmooth.set(smooth, n);
         // the two plates: sends (constant power; exactly 1 and 0 at the ends) and coefficients
         const float split = std::fmin(std::fmax(fParams[kParamSplit], 0.0f), 100.0f);
         const double angle = 0.5 * M_PI * 0.01 * split;
@@ -733,9 +747,10 @@ private:
             PlateLine& line = fLines[k];
             const int* const q = kPlateParams[k];
             const float bw = static_cast<float>(TinplateLaw::bandwidthCoef(fParams[q[0]]));
-            const float decay = freeze ? 1.0f : TinplateLaw::decay(fParams[q[1]]);
-            const float damp = freeze ? 1.0f : static_cast<float>(TinplateLaw::dampingCoef(fParams[q[2]]));
             const float size = fParams[q[3]] / 100.0f;
+            const float decay = freeze ? 1.0f
+                                       : TinplateLaw::decay(TinplateSmooth::tail(fParams[q[1]], fParams[q[2]], size, smooth));
+            const float damp = freeze ? 1.0f : static_cast<float>(TinplateLaw::dampingCoef(fParams[q[2]]));
             if (!ramp || (!line.running && sends[k] > 0.0f))
             {
                 // reset, or a stopped (empty) plate starting again: its settings at once
@@ -747,6 +762,7 @@ private:
                     p.setBandwidth(bw);
                     p.setDamping(damp);
                     p.setModulation(fModulation.cur);
+                    p.setSmooth(fSmooth.cur);
                     p.setSize(size, 0);
                     p.finishGlide();
                 }
@@ -932,6 +948,7 @@ private:
         fEnv = 0.0f;
         fInGain.reset(0.0f);
         fModulation.reset(0.0f);
+        fSmooth.reset(0.0f);
         fWet.reset(0.0f);
         fDry.reset(0.0f);
         fWidth.reset(0.0f);
@@ -960,7 +977,7 @@ private:
     PlateLine fLines[2];           // plates A and B in parallel; clear: plate[fCur] of each is current
     float fNormal = 1e-20f;        // NOISE_FLOOR of CAPS
     bool fRamp = false;
-    Ramp<float> fInGain, fModulation, fWet, fDry, fWidth, fStereo, fGain, fBypass;
+    Ramp<float> fInGain, fModulation, fSmooth, fWet, fDry, fWidth, fStereo, fGain, fBypass;
     Cut2 fLowCut, fHighCut, fMonoBass;   // mono bass: high-pass of the side signal
     std::vector<float> fPre[2];          // pre-delay of the left and right channels
     double fBpm = TinplateNote::kDefaultBpm;

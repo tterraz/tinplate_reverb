@@ -23,8 +23,12 @@ measured decay-time display, level history, presets and A/B comparison.
   **Damping** and **Size**; the **Split** knob sends the input to plate A, plate B or both at
   constant power (0 %: plate A only, the original). A plate without input stops computing once
   its tail has died away.
-- **RANDOM** (new in 1.3.0): draws the sound (both plates, split, modulation, pre-delay, filters,
-  width, mono bass) at random over the travel of each knob; levels, ducking and clear are kept.
+- **RANDOM** (new in 1.3.0): draws the sound (both plates, split, modulation, smooth, pre-delay,
+  filters, width, mono bass) at random over the travel of each knob; levels, ducking and clear are kept.
+- **Smooth** (new in 1.4.0): removes the regular waves of level heard at the end of a long tail
+  (beats at 11 and 33 Hz, from the allpasses of the tank) by lower allpass coefficients and short
+  allpasses added; the decay time is kept (Tail compensated from a measured table). 0 %: the
+  original, to the bit.
 - Smooth automation: every coefficient glides in 20 ms (the original jumps at the next block).
 - **Pre-delay** (0-250 ms, crossfaded changes), or **synced** to the host tempo (new in 1.2.0:
   1/64 to 1/4, dotted and triplet), **Low cut** and **High cut** on the reverb (12 dB/octave),
@@ -63,7 +67,7 @@ measured decay-time display, level history, presets and A/B comparison.
 
 ## Installation
 
-**Windows**: run `Tinplate-Reverb-1.3.0-setup.exe` (VST3, optional CLAP and user manuals). Manually: copy the
+**Windows**: run `Tinplate-Reverb-1.4.0-setup.exe` (VST3, optional CLAP and user manuals). Manually: copy the
 `tinplate_reverb.vst3` folder to `C:\Program Files\Common Files\VST3\` and
 `tinplate_reverb.clap` to `C:\Program Files\Common Files\CLAP\`.
 

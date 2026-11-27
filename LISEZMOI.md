@@ -65,6 +65,7 @@ Différences voulues avec l'original :
 | Bandwidth | passe-bas d'entrée (original) ; affiché : sa fréquence à -3 dB à la fréquence d'échantillonnage courante (« open » s'il reste au-dessus de -3 dB jusqu'à Nyquist) |
 | Tail | longueur de la réverbération (original jusqu'à 1 : 5,1 s à 500 Hz) ; jusqu'à 1,16 depuis 1.1.0, même loi (decay 0,869 : 10 s à 500 Hz, Damping au minimum) ; affiché : RT60 à 500 Hz mesuré (voir plus bas) |
 | Damping | passe-bas dans la boucle (original) ; affiché : sa fréquence à -3 dB |
+| Smooth | (1.4.0, point R d'`AMELIORATIONS.md`) 0-100 % (défaut 0 : l'original au bit près, coût de 1.3.0), commun aux deux plaques, bouton SMOOTH à côté de RATE (case RT60 resserrée à droite) : efface les battements de fin de queue (11 et 33 Hz, retard de groupe inégal des passe-tout de la boucle) ; `PlateCore::Plate::setSmooth` : coefficients 0,723/0,729 → 0,5 (linéaire), 2 courts passe-tout à la sortie de chaque retard (3,1/4,7 ; 2,3/5,3 ; 3,7/4,3 ; 2,9/5,9 ms, ±0,5 s³, ne suivent pas Size ; retards raccourcis d'autant), contournés à 0 et remplis depuis la mémoire du retard quand Smooth quitte 0 (exact) ; Tail compensé (`plugin/Smooth.hpp`, table `Rt60SmoothTable.hpp` par `tools/rt60_smooth_table.cpp`, 10 min sur 7 cœurs) : RT60 à 500 Hz tenu à 1-3 % ; sous -50 dB la queue lissée s'éteint plus vite ; rampe 20 ms ; test 21 |
 | Depth, Rate | (point B) profondeur 0-200 % et vitesse 0,1-5 Hz (logarithmique) de la modulation des deux passe-tout modulés ; 100 % et 1,2 Hz : l'original au bit près (1,2 Hz pris en double exact, le paramètre float n'étant pas 1,2) ; Depth multiplie la rampe du gel (200 ms) ; Rate : `Sine::retune` garde la phase (tirée des deux dernières valeurs) ; mémoire pour Depth 200 % ; table des RT60 mesurée à Depth 100 % ; test 15 |
 | Size | (après `v1.1.0`, point C d'`AMELIORATIONS.md` ; choix 1b, 2a, puis 50-200 %) taille de la plaque, 50-200 % : retards et passe-tout de la boucle, passe-tout modulés et 12 prises × Size, arrondis (diffuseurs d'entrée inchangés) ; gain de boucle non compensé (durée ≈ × Size) ; changement glissé en 100 ms, lectures interpolées pendant le glissement seulement (`PlateCore::Plate::setSize`) ; 100 % : identité au bit (le pointeur de lecture est calculé depuis celui d'écriture, mêmes valeurs) ; mémoire pour 200 % ; Clear : la plaque vide prend la taille aussitôt (`finishGlide`) ; test 14 |
 | Split | (après 1.2.0, point N) part de l'entrée envoyée à chaque plaque, 0-100 % (défaut 0 : plaque A seule, l'original au bit près) : plaque A × cos, plaque B × sin de Split × 90° (puissance constante : niveau à peu près constant si les deux queues sont décorrélées ; exactement 1 et 0 aux bouts) ; envoi en rampe de 20 ms ; l'entrée des plaques est prise après pré-retard, gel et entrée stéréo, leurs sorties sont sommées avant Low cut ; gros bouton de la section INPUT (à la place de Bandwidth), pastilles A et B aux bouts de l'arc ; plaques nommées A et B (pas 1 et 2 : confusion avec les numéros des sections, décision de l'utilisateur) ; test 20 |
@@ -310,3 +311,13 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   demande un nouveau numéro.
   Releases `v1.1.0` et `v1.2.0` supprimées de GitHub le 2026-11-27 (demande de l'utilisateur) ;
   leurs étiquettes, supprimées avec elles, remises à l'identique : `v1.3.0` est la seule release.
+- **1.4.0 (session 78, 2026-11-27)** : R Smooth (demande de l'utilisateur :
+  « vaguelettes de volume » en fin de queue). Version 1.4.0 dans `getVersion`, l'installateur,
+  `README.md`, les deux manuels (20 pages, figure `fig_smooth`). Vérifié : `build.sh` sans
+  avertissement, tests DSP 91/91 (strict et `-ffast-math` ; test 1 : Smooth 0 = CAPS au bit),
+  validateur VST3 47/47 Linux et Windows, interface vue (capture, deux thèmes). Mesures : outil
+  `tools/ripple.cpp` (`ripple_measure.hpp`). Captures 1.4.0 : Slate = préréglage 12 (Two plates),
+  sans bulle ; Tin = préréglage 12, `_CLEAR`, `_OPTIONS`, `_SYNC`, bulle 28 (Smooth). Zone de
+  démonstration : knob 28 Smooth. Le premier
+  `build.sh` de la session a réécrit `bin/Tinplate-Reverb-1.3.0-setup.exe` (piège connu ; la
+  release est dans `build/release/`).
