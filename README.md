@@ -19,11 +19,11 @@ measured decay-time display, level history, presets and A/B comparison.
   **Tail** goes beyond the original range with the same law, up to 10 s at 500 Hz; **Size**
   (50 to 200 %) scales the plate (longer delays: deeper, denser, longer); **Depth** and **Rate**
   set the modulation of the tank (100 % and 1.2 Hz: the original).
-- **Two plates in parallel** (after 1.2.0): a second plate with its own **Bandwidth**, **Tail**,
+- **Two plates in parallel** (new in 1.3.0): a second plate with its own **Bandwidth**, **Tail**,
   **Damping** and **Size**; the **Split** knob sends the input to plate A, plate B or both at
   constant power (0 %: plate A only, the original). A plate without input stops computing once
   its tail has died away.
-- **RANDOM** (after 1.2.0): draws the sound (both plates, split, modulation, pre-delay, filters,
+- **RANDOM** (new in 1.3.0): draws the sound (both plates, split, modulation, pre-delay, filters,
   width, mono bass) at random over the travel of each knob; levels, ducking and clear are kept.
 - Smooth automation: every coefficient glides in 20 ms (the original jumps at the next block).
 - **Pre-delay** (0-250 ms, crossfaded changes), or **synced** to the host tempo (new in 1.2.0:
@@ -47,7 +47,7 @@ measured decay-time display, level history, presets and A/B comparison.
   3, 7 or 30 s, with the Threshold, Floor and Trigger lines, to set ducking and clear by eye.
 - **Decay time display**: RT60 against frequency from a table measured on the plate's impulse
   response (within 10 % of a new measurement), with the tone of the reverb.
-- **Presets**: 12 factory presets (three new in 1.2.0 with Clear, Link and the options) and your own (save, replace, delete), shared by all projects.
+- **Presets**: 13 factory presets (Two plates new in 1.3.0; three new in 1.2.0 with Clear, Link and the options) and your own (save, replace, delete), shared by all projects.
 - **A/B comparison** saved with the project; dark (Slate) and light (Tin) themes; tooltips
   everywhere; keyboard entry of values (right-click a knob); resizable HiDPI interface.
 - Bypass declared to the host, zero latency, no denormal slowdown.
@@ -63,7 +63,7 @@ measured decay-time display, level history, presets and A/B comparison.
 
 ## Installation
 
-**Windows**: run `Tinplate-Reverb-1.2.0-setup.exe` (VST3, optional CLAP and user manuals). Manually: copy the
+**Windows**: run `Tinplate-Reverb-1.3.0-setup.exe` (VST3, optional CLAP and user manuals). Manually: copy the
 `tinplate_reverb.vst3` folder to `C:\Program Files\Common Files\VST3\` and
 `tinplate_reverb.clap` to `C:\Program Files\Common Files\CLAP\`.
 

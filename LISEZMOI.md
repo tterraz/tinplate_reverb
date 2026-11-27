@@ -295,9 +295,13 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   Validateur CLAP abandonné (décision de l'utilisateur). Interface revue avec l'utilisateur ; release publiée. Reste : écoute, réglage des préréglages à l'oreille, vrai hôte ; tout changement livré demande un nouveau numéro.
 - Pistes non faites : réglages des préréglages à l'oreille ;
   autres pistes dans `AMELIORATIONS.md`.
-- **Après 1.2.0 (session 76, 2026-11-27, non publié)** : N deuxième plaque en parallèle (Split,
+- **1.3.0 (session 76, 2026-11-27, release GitHub `v1.3.0` publiée, notes `build/release/notes-1.3.0.md`)** : N deuxième plaque en parallèle (Split,
   Bandwidth B, Tail B, Damping B, Size B, préréglage Two plates ; zones de démonstration : knobs
   23 Split, 24-27 plaque B), O cadres du haut plus hauts et vu-mètres agrandis (900 × 918).
   Puis P (A/B, couleurs, FREEZE dans OUTPUT) et Q (RANDOM).
-  Restent : écoute (Two plates, défauts de la plaque B), tirage RANDOM au clic, vrai hôte, manuels (fr, en : section
-  PLATE, Split, figures) et captures à refaire à la release, qui prendra un nouveau numéro.
+  Version 1.3.0 dans `getVersion`, l'installateur, `README.md`, les deux manuels (19 pages :
+  Split et plaque B, RANDOM, interface ; figures inchangées). Vérifié : `build.sh` sans
+  avertissement, validateur VST3 47/47 Linux et Windows, installateur `/S` sous Wine (VST3
+  identique, CLAP, deux manuels identiques, raccourcis, puis tout retiré). Restent : écoute (Two
+  plates, défauts de la plaque B), tirage RANDOM au clic, vrai hôte ; tout changement livré
+  demande un nouveau numéro.

@@ -33,7 +33,7 @@
 
 \title{\textcolor{steel}{\textbf{TINPLATE}} \textsf{REVERB}\\[4pt]
 \large User manual and description of the algorithm}
-\author{Version 1.2.0}
+\author{Version 1.3.0}
 \date{}
 
 \begin{document}
@@ -56,12 +56,13 @@ plate described by Jon Dattorro (\emph{Effect Design, Part 1}, J. Audio Eng. Soc
 core is taken over unchanged, operation by operation: with the additions at neutral, the output
 is that of the original to the bit (section~\ref{sec:identity}).
 
-Around this core, Tinplate adds what everyday use needs: pre-delay (free or locked to the
+Around this core, Tinplate adds what everyday use needs: a second plate in parallel (its own
+settings, the share of the input set by Split), pre-delay (free or locked to the
 tempo), size of the plate, adjustable modulation, low and high cut on the reverb, stereo width,
 optional stereo input and mono bass, freeze, \emph{ducking} (the reverb steps back while the
 input plays), emptying of the plate at each new attack (\emph{Clear}), tails up to 10\,s,
 output gain, smoothing of the controls, display of the real decay time, history of the levels,
-presets, A/B comparison.
+presets, random draw (RANDOM), A/B comparison.
 
 \paragraph{Formats.} VST3 and CLAP for 64-bit Windows; VST3, CLAP and LV2 for Linux. The plugin
 is stereo (two inputs, two outputs); its latency is zero.
@@ -72,7 +73,7 @@ plugin formats rely on DPF (ISC licence).
 % ==============================================================================================
 \section{Installation}
 
-\paragraph{Windows.} Run \texttt{Tinplate-Reverb-1.2.0-setup.exe}: it installs the VST3
+\paragraph{Windows.} Run \texttt{Tinplate-Reverb-1.3.0-setup.exe}: it installs the VST3
 (required) and, if ticked, the CLAP and the user manuals, then adds an uninstaller (\emph{Apps
 and features}). By hand: copy the folder \texttt{tinplate\_reverb.vst3} into
 \verb|C:\Program Files\Common Files\VST3\| and \texttt{tinplate\_reverb.clap} into
@@ -92,8 +93,8 @@ the user (section~\ref{sec:files}).
 \item \textbf{As an insert} on a track: the \ctl{Default} preset is loaded (Reverb $-16$\dB, Dry
   $-1.5$\dB, a reverb of about 1.9\,s at 500\,Hz). \textbf{On an auxiliary send}: choose
   \ctl{Send (100 \% wet)}, which gives the reverb only.
-\item Set the length with \ctl{TAIL}; the value in seconds is shown under the knob and in the
-  middle of section 2.
+\item Set the length with \ctl{TAIL}; the value in seconds is shown under the knob and at
+  the bottom of section 2.
 \item Darken or brighten with \ctl{DAMPING} (highs that die sooner in the tail) and
   \ctl{BANDWIDTH} (highs that enter the plate).
 \item Move the reverb away from the direct sound with \ctl{PRE-DELAY} (20 to 40\,ms on a
@@ -101,6 +102,9 @@ the user (section~\ref{sec:files}).
   soften the highs of the tail with \ctl{HIGH CUT}.
 \item Balance with the faders \ctl{DRY} (direct sound) and \ctl{REVERB} (reverb alone).
   \ctl{FREEZE} holds the reverb forever.
+\item For a richer reverb, turn \ctl{SPLIT} (section 1) towards B: part of the input goes into
+  plate B, set on the second row of section 2 (for instance larger and darker than A).
+  \ctl{RANDOM} draws a sound at random; \ctl{A | B} to compare.
 \item For a reverb that keeps the voice clear, raise \ctl{DUCK} (section 4): the reverb goes
   down while singing and comes back in the gaps.
 \item For each new hit (chord, drum) to start in a clean reverb, switch \ctl{CLEAR} on
@@ -113,7 +117,7 @@ the user (section~\ref{sec:files}).
 % ==============================================================================================
 \section{The interface}
 
-The window (900 × 858 points, resizable with its proportions kept, sharp on high-density
+The window (900 × 918 points, resizable with its proportions kept, sharp on high-density
 screens) reads from left to right in the order of the signal: three numbered sections joined by
 arrows, then the sections \ctl{DUCKING} (4) and \ctl{CLEAR} (5), mirror images of each other,
 the \ctl{HISTORY} (6) and the
@@ -122,7 +126,7 @@ the detailed value.
 
 \begin{center}
 \includegraphics[width=0.8\textwidth]{capture_interface_tin.png}\\[2pt]
-\small Light theme \ctl{TIN}; Freeze, Sync, stereo input, Mono bass and Clear on.
+\small Light theme \ctl{TIN}, preset Two plates; Sync, stereo input, Mono bass and Clear on.
 \end{center}
 
 \subsection{Header}
@@ -138,24 +142,31 @@ the detailed value.
   the project.
 \item[SLATE | TIN.] Dark or light theme (grey with a slight green tint), no effect on the
   sound; it is a preference of the computer, shared by all instances and all projects.
-\item[FREEZE.] Freezes the reverb (lit LED); Tail, Damping, Depth and Rate are then greyed,
-  since they no longer act (section~\ref{sec:freeze}).
+\item[RANDOM.] Draws the settings that make the sound at random, each over the whole travel of
+  its knob (logarithmic ones too): Bandwidth, Tail, Damping and Size of both plates, Split,
+  Depth, Rate, Pre-delay, Low cut, High cut, Width, Mono bass. The levels (Dry, Reverb, Output,
+  Link, Mix), the ducking, Clear, Sync, Stereo input, Freeze and Bypass are kept. The result is
+  shown as the preset ``Random''; A | B compares it with the previous settings.
 \item[ACTIVE / BYPASSED.] The Bypass declared to the host (section~\ref{sec:smoothing}).
 \end{description}
 
 \subsection{Section 1: INPUT}
-\ctl{PRE-DELAY} and \ctl{BANDWIDTH}: what goes into the plate. The small \ctl{SYNC} button locks
-the pre-delay to the tempo of the host: the Pre-delay knob then chooses a note value (1/64 to
-1/4, dotted ``D'' or triplet ``T''). The small \ctl{STEREO} button, by Bandwidth, makes each
-channel enter its own half of the plate (stereo input). Under Bandwidth, its value and the $-3$\dB{}
-frequency of the filter at the current sample rate (``open'' when it stays above
-$-3$\dB{} up to the Nyquist frequency).
+\ctl{PRE-DELAY} and \ctl{SPLIT}: when and into which plate the signal goes. The small
+\ctl{SYNC} button, under Pre-delay, locks the pre-delay to the tempo of the host: the Pre-delay
+knob then chooses a note value (1/64 to 1/4, dotted ``D'' or triplet ``T''). Split sets the
+share of the input sent to each plate; the badges \ctl{A} and \ctl{B} at the ends of its arc go
+dark when their plate gets nothing. The small \ctl{STEREO} button, under Split, makes each
+channel enter its own half of each plate (stereo input).
 
 \subsection{Section 2: PLATE}
-Five knobs of the same size in two rows: \ctl{TAIL}, \ctl{DAMPING} (under it, the $-3$\dB{}
-frequency of its filter) and \ctl{SIZE} (size of the plate); then \ctl{DEPTH} and \ctl{RATE}
-(depth and rate of the modulation, greyed while frozen, which stops it). Below, the decay time
-(RT60) at 500\,Hz, large, and at 125\,Hz and 4\,kHz (``infinite'' while frozen).
+One row per plate, marked with its badge, \ctl{A} in brass and \ctl{B} in copper:
+\ctl{BANDWIDTH} and \ctl{DAMPING} (under them, the $-3$\dB{} frequency of their filter at the
+current sample rate, ``open'' when it stays above $-3$\dB{} up to the Nyquist frequency),
+\ctl{TAIL} (under it, the decay time at 500\,Hz) and \ctl{SIZE} (size of the plate). The row of a
+plate that gets nothing (Split at 0 or 100\,\%) is greyed. Below, shared by both plates,
+\ctl{DEPTH} and \ctl{RATE} (depth and rate of the modulation); Tail, Damping, Depth and Rate are
+greyed while frozen, when they no longer act. On the right, the decay time (RT60) at 500\,Hz of
+each plate, in its colour (``infinite'' while frozen).
 
 \subsection{Section 3: OUTPUT}
 Four small knobs in a square: \ctl{WIDTH} and \ctl{MONO BASS} (width), \ctl{LOW CUT} and
@@ -165,7 +176,8 @@ go from ``off'' (at the bottom) to $+6$\dB, with the scale on their left (0\dB{}
 fifths of the travel); Output goes from $-24$ to $+12$\dB. The small chain above Dry and Reverb
 links them (whole chain, golden) or unlinks them (broken chain): see Dry, Reverb
 (section~\ref{sec:controls}). A fader follows the mouse (\textsf{Shift}: four times finer) and
-otherwise works as a knob. Then three peak meters: \ctl{IN} (input), \ctl{REVERB} (reverb alone,
+otherwise works as a knob. Under the four small knobs, \ctl{FREEZE} freezes the reverb (lit
+LED; section~\ref{sec:freeze}). Then three peak meters, with their dBFS scale: \ctl{IN} (input), \ctl{REVERB} (reverb alone,
 after Low cut, High cut, Mono bass, Width and ducking, before its fader), \ctl{OUT} (output), in dBFS;
 after a peak, the display falls back with a time constant of 0.25\,s.
 
@@ -201,11 +213,11 @@ project.
 \subsection{Decay time and tone}
 At the bottom, on a frequency scale from 20\,Hz to 20\,kHz (or to the Nyquist frequency):
 \begin{itemize}
-\item in brass, the \textbf{decay time} against frequency (left scale, in seconds; full scale
-  from 2 to 32\,s depending on the curve), set by Tail and Damping; while frozen, the words
-  ``FROZEN: infinite decay'';
-\item in steel and dashed, the \textbf{tone} of the reverb (right scale, in dB), set by
-  Bandwidth, Low cut and High cut.
+\item the \textbf{decay time} against frequency of each plate that gets input, A in brass, B in
+  copper (left scale, in seconds; full scale from 2 to 32\,s depending on the curves), set by its
+  Tail, Damping and Size; while frozen, the words ``FROZEN: infinite decay'';
+\item in steel and dashed, the \textbf{tone} of the reverb (right scale, in dB), set by the
+  Bandwidths of both plates (weighted in power by Split), Low cut and High cut.
 \end{itemize}
 
 \subsection{Using the knobs}
@@ -230,10 +242,15 @@ Control & Range & Default & Role \\
 Pre-delay & 0--250\,ms & 0\,ms & delay before the plate \\
 Sync & on/off & off & pre-delay locked to the tempo of the host \\
 Note & 1/64--1/4 & 1/16 & locked pre-delay: note value (dotted, triplet) \\
-Bandwidth & 0--1 & 0.5 & input low-pass of the plate (original) \\
-Tail & 0--1.16 & 0.5 & length of the reverb (original up to 1) \\
-Damping & 0--1 & 0.75 & low-pass inside the loop (original) \\
-Size & 50--200\,\% & 100\,\% & size of the plate (100\,\%: the original) \\
+Split & 0--100\,\% & 0\,\% & share of the input sent to plate B (0: A alone) \\
+Bandwidth & 0--1 & 0.5 & plate A: input low-pass (original) \\
+Tail & 0--1.16 & 0.5 & plate A: length of the reverb (original up to 1) \\
+Damping & 0--1 & 0.75 & plate A: low-pass inside the loop (original) \\
+Size & 50--200\,\% & 100\,\% & plate A: size (100\,\%: the original) \\
+Bandwidth B & 0--1 & 0.5 & plate B: input low-pass \\
+Tail B & 0--1.16 & 0.5 & plate B: length of the reverb \\
+Damping B & 0--1 & 0.75 & plate B: low-pass inside the loop \\
+Size B & 50--200\,\% & 150\,\% & plate B: size \\
 Depth & 0--200\,\% & 100\,\% & depth of the modulation (100\,\%: the original) \\
 Rate & 0.1--5\,Hz & 1.2\,Hz & rate of the modulation (1.2\,Hz: the original) \\
 Freeze & on/off & off & reverb held forever \\
@@ -274,6 +291,23 @@ two thirds), sorted by length. At 120\,BPM, 1/16 is 125\,ms and a dotted 1/8 is 
 host gives no tempo, the plugin takes 120\,BPM. The delay is limited to 2\,s (a quarter note at
 30\,BPM). A change of tempo or of note goes through the same 30\,ms crossfade. The Pre-delay
 setting in milliseconds is kept and comes back when Sync is switched off.
+
+\paragraph{Split, plate B.} Tinplate has two plates in parallel, A and B, built as that of the
+original. Each has its own Bandwidth, Tail, Damping and Size; the modulation (Depth, Rate), the
+freeze and Clear are shared. Split sets the share of the input sent to each, at constant
+power: plate A gets the input times $\cos(\pi/2 \cdot \mathrm{Split})$, plate B times
+$\sin(\pi/2 \cdot \mathrm{Split})$ (Split from 0 to 1, that is 0 to 100\,\%). At 50\,\%, each
+gets 0.71: since the two tails differ, their energies add up and the level of the reverb stays
+about the same over the whole travel (measured: within 0.01\dB{} of the mean of the two plates
+alone). At 0\,\% (default), only A gets the input, with a gain of exactly 1: the sound is that
+of a single plate, to the bit; at 100\,\%, only B. Two plates of different sizes give a denser,
+less metallic tail than one; a small bright plate and a large dark one give a clear onset
+followed by a long trail (preset Two plates). The modulation of B starts 45° later: two plates
+with the same settings are not quite identical. A plate that gets nothing any more rings to the
+end of its tail, then stops computing; it starts again empty when Split gives it input. Both
+plates together take about 1.8 times the computation of one.
+
+The following paragraphs describe the controls of one plate; those of B act in the same way on B.
 
 \paragraph{Bandwidth.} First-order low-pass at the input of the plate: it sets how much treble
 enters, hence the brightness of the whole reverb, attack included. It does not act on the
@@ -411,6 +445,7 @@ Ducked vocal      & 0.85 & 0.65 & 0.45 & $-14.0$ & $-1.9$ & 25 & 150 & 110 & 12 
 Piano (clear)     & 0.80 & 0.70 & 0.45 & \multicolumn{2}{c}{Mix 0.30} & 15 & 80 & 120 & off & 2.9 \\
 Snare (clear)     & 0.95 & 0.50 & 0.25 & \multicolumn{2}{c}{Mix 0.25} & 1/32 & 200 & 130 & off & 1.6 \\
 Guitar (stereo)   & 0.80 & 0.60 & 0.40 & \multicolumn{2}{c}{Mix 0.28} & 20 & 120 & 140 & off & 2.3 \\
+Two plates        & 0.90 & 0.35 & 0.25 & $-16.0$ & $-1.5$ & 15 & 100 & 120 & off & 1.1 \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -418,12 +453,15 @@ Reverb and Dry in dB (the mix of the original at Blend 0.30, 0.25, 0.22\ldots), 
 ms, Low cut in Hz, Width in \%, Duck in dB, RT60 at 500\,Hz in seconds (at 44.1\,kHz); Output at
 0\dB{} everywhere, Freeze off, High cut off; Threshold $-30$\dBFS{} and Attack 10\,ms
 everywhere, Release 300\,ms (400\,ms for Ducked vocal); Size 100\,\%, Clear, Link, Sync and the
-options off, except for the last three. \textbf{Piano (clear)}: Size 120\,\%, Link (Mix 0.30),
+options off, except for the last four. \textbf{Piano (clear)}: Size 120\,\%, Link (Mix 0.30),
 Clear (Floor $-50$, Trigger $-20$\dBFS, Fade 120\,ms, Window 40\,ms), stereo input.
 \textbf{Snare (clear)}: Size 90\,\%, Link (Mix 0.25), High cut 12\,kHz, pre-delay locked to a
 thirty-second note (1/32), Clear (Floor $-45$, Trigger $-15$\dBFS, Fade 40\,ms, Window 10\,ms).
 \textbf{Guitar (stereo)}: Size 110\,\%, Depth 120\,\%, Rate 0.8\,Hz, Link (Mix 0.28), stereo
-input, Mono bass 150\,Hz. ``Original (CAPS)'' reproduces the original to the bit. These
+input, Mono bass 150\,Hz. \textbf{Two plates}: Split 50\,\%, plate A small and bright (Size
+70\,\%, values of the table), plate B large and dark (Bandwidth 0.60, Tail 0.75, Damping 0.65,
+Size 170\,\%: 4.2\,s at 500\,Hz). Split is 0 in the other presets, where plate B takes the
+settings of A with a size 1.5 times larger, ready to be added. ``Original (CAPS)'' reproduces the original to the bit. These
 presets were set from the laws of the controls, not by ear. They are also given to the host
 (list of programs).
 
@@ -467,7 +505,7 @@ itself.
 \node[blk, right=of in] (pre) {Pre-delay};
 \node[blk, right=of pre] (sum) {$(L+R)/2$\\or $L$, $R$};
 \node[blk, right=of sum] (frz) {× input\\(Freeze)};
-\node[core, right=of frz] (plate) {plate\\(original)};
+\node[core, right=of frz] (plate) {plates A, B\\× cos, × sin\\(Split)};
 \node[blk, below=10mm of plate] (lc) {Low cut\\High cut};
 \node[blk, left=of lc] (wd) {Mono bass\\Width};
 \node[blk, left=of wd] (dk) {× gain\\Duck};
@@ -488,8 +526,10 @@ itself.
 The Pre-delay delays both channels. The input is then brought to mono, as in the original, with
 a constant of $\pm10^{-20}$ ($-400$\dB, its sign flipped at each sample) that keeps the plate out
 of denormal numbers; with the stereo input, $L$ and $R$ enter separately
-(section~\ref{sec:stereo}). The plate gives two channels, $w_L$ and $w_R$. All the rest is
-stereo.
+(section~\ref{sec:stereo}). This signal enters plate A times $\cos(\pi/2 \cdot \mathrm{Split})$
+and plate B times $\sin(\pi/2 \cdot \mathrm{Split})$ (gains exactly 1 and 0 at both ends, 20\,ms
+ramp); the outputs of the two plates are summed into two channels, $w_L$ and $w_R$. All the rest
+is stereo.
 
 \subsection{The plate}\label{sec:plate}
 
@@ -711,7 +751,8 @@ output is lowered, so the tail comes back at the level it would have had without
 
 \subsection{Clearing (Clear)}\label{sec:clear}
 
-The plugin has two identical plates. The input goes into the current plate. At an attack, the
+Each plate (A and B) is doubled: the input goes into the current copy, and both plates switch
+together. Below, ``plate'' means one copy. The input goes into the current plate. At an attack, the
 other plate, empty, becomes the current one and receives the input from that very sample; the
 old one receives nothing more and its output fades out in Fade milliseconds (raised cosine,
 $g = \tfrac12 + \tfrac12 \cos(\pi t / \text{Fade})$), then it is emptied and stops computing.
@@ -773,7 +814,7 @@ keeps running during the Bypass.
 The code of the plate is a transcription of that of CAPS 0.9.26 (classes \texttt{PlateStub},
 \texttt{Delay}, \texttt{LP1}, \texttt{Sine}) that keeps the type of each operation (samples in
 single precision, some products and sums in double). With Pre-delay 0, Low cut and High cut
-off, Width 100\,\%, Output 0\dB, Size and Depth 100\,\%, Rate 1.2\,Hz, Duck 0, Clear, Freeze,
+off, Width 100\,\%, Output 0\dB, Size and Depth 100\,\%, Rate 1.2\,Hz, Split 0, Duck 0, Clear, Freeze,
 Stereo input and Mono bass off, for any values of Bandwidth, Damping and Tail (up to 1), the
 output is \textbf{that of the original to the bit} with Link on and Mix equal to the Blend of
 the original, for any mix, with steady controls; likewise, without Link, for the reverb alone
@@ -828,6 +869,10 @@ exit.
   mono that the mix does not thin out (or use Mono bass).
 \item[Pads.] Play a chord, switch Freeze on, then play over it: the frozen chord holds under the
   playing. Raise Reverb to hear it more.
+\item[Two plates.] Split 30 to 50\,\% with a plate B larger (Size 150 to 200\,\%) and darker
+  than A: plate A gives the onset, B the trail. Close but different sizes (100 and 130\,\%)
+  thicken the tail without changing its character.
+\item[Looking for a sound.] RANDOM, then A | B to keep the best; the levels do not move.
 \item[Comparing two settings.] Set A, copy to B (\ctl{A>B}), change B, then switch A | B.
 \end{description}
 
@@ -851,7 +896,8 @@ exit.
   \texttt{highcut}, \texttt{width}, \texttt{output}, \texttt{duck}, \texttt{threshold},
   \texttt{attack}, \texttt{release}, \texttt{clear}, \texttt{floor}, \texttt{trigger},
   \texttt{fade}, \texttt{window}, \texttt{stereo}, \texttt{monobass}, \texttt{sync},
-  \texttt{note}), numbers with a decimal point whatever the language of the system. A missing
+  \texttt{note}, \texttt{split}, \texttt{bandwidth\_b}, \texttt{tail\_b}, \texttt{damping\_b},
+  \texttt{size\_b}), numbers with a decimal point whatever the language of the system. A missing
   key takes its default value, a value out of range is brought back into the range, an unknown
   line is ignored. Copying the file is enough to share a preset.
 \end{description}

@@ -46,7 +46,7 @@ demandera un nouveau numéro de version. Détails de l'existant : `LISEZMOI.md`.
 - **M. Validation** : validateur CLAP abandonné (décision de l'utilisateur, 2026-11-26) ; reste
   l'essai dans un vrai logiciel audio sous Windows et Linux (par l'utilisateur).
 
-## Après 1.2.0 (session 76, 2026-11-27, non publié)
+## 1.3.0 (session 76, 2026-11-27, release GitHub `v1.3.0` publiée)
 - **N. Deuxième plaque en parallèle** : **faite** (demande de l'utilisateur ; choix : plaque B à
   Bandwidth, Tail, Damping, Size propres, modulation, gel et Clear partagés ; bouton Split à
   puissance constante, plaque A × cos, plaque B × sin de Split × 90°). Split 0 (défaut) : sortie

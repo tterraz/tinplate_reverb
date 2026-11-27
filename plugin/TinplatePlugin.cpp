@@ -324,7 +324,7 @@ protected:
     }
     const char* getMaker() const override { return "Tinplate"; }
     const char* getLicense() const override { return "GPL-3.0-or-later"; }
-    uint32_t getVersion() const override { return d_version(1, 2, 0); }
+    uint32_t getVersion() const override { return d_version(1, 3, 0); }
 
     void initParameter(const uint32_t index, Parameter& p) override
     {
