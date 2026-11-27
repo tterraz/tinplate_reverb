@@ -257,8 +257,9 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
 ## Pour reprendre
 - Dossier créé en session 68 (2026-11-25) à côté de `brimstone_vst3/`, dont il reprend la
   structure (DPF, `build.sh`, préférences, préréglages, A/B, thèmes, installateur, validateur
-  `tools/validate_vst3.sh`). Dépôt git : `master`, distant `origin` = `git@github.com:tterraz/tinplate_reverb.git` (dépôt GitHub
-  renommé de `tinplate` en `tinplate_reverb` le 2026-11-25 ; l'ancienne adresse redirige).
+  `tools/validate_vst3.sh`). Dépôt git : `master`, distant `origin` = `git@github.com:tterraz-vibe-audio/tinplate_reverb.git` (dépôt GitHub
+  renommé de `tinplate` en `tinplate_reverb` le 2026-11-25, transféré du compte `tterraz` à l'organisation
+  `tterraz-vibe-audio` le 2026-11-27 ; les anciennes adresses redirigent).
 - Captures : `CXXFLAGS="-DTINPLATE_UI_DEMO=<zone> -DTINPLATE_UI_DEMO_THEME=<0|1>
   [-DTINPLATE_UI_DEMO_PRESET=<n>] [-DTINPLATE_UI_DEMO_FREEZE=1] [-DTINPLATE_UI_DEMO_CLEAR=1]
   [-DTINPLATE_UI_DEMO_OPTIONS=1] [-DTINPLATE_UI_DEMO_SYNC=1]"`, version autonome
