@@ -4,7 +4,9 @@ Réverbération à plaque, reprise de **`PlateX2`** de CAPS (Tim Goetze, « C* P
 **Plate2x2** dans la série 0.4), réécrite en C++ avec DPF, interface NanoVG.
 Formats : VST3 et CLAP pour Windows 64 bits ; VST3, CLAP et LV2 pour Linux.
 **Licence : GPL 3 ou ultérieure** (`COPYING`), comme CAPS ; DPF est sous ISC (compatible).
-Nom provisoire (changer : `DistrhoPluginInfo.h`, `Makefile`, installateur, préférences).
+Nom **Tinplate** gardé (décision, session 77 : « Twinplate » écarté ; Split vaut 0 par défaut, une seule plaque
+entendue). Pour le changer : `DistrhoPluginInfo.h`, `Makefile`, installateur, préférences ; garder l'URI, l'identifiant
+CLAP et `TpRv`.
 
 ![interface, thème Slate](doc/captures/capture_interface.png)
 ![interface, thème Tin, bulle d'aide](doc/captures/capture_interface_tin.png)
@@ -275,7 +277,7 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
   `Tinplate-Reverb-V-linux-x86_64.tar.gz` (VST3, CLAP, LV2), chacun avec `COPYING` et les deux
   manuels, et les manuels seuls `Tinplate-Reverb-manual.pdf` et `Tinplate-Reverb-manuel.pdf` ; notes en anglais (`build/release/notes-V.md` :
   nouveautés, téléchargements, installation, essais faits et non faits, licence) ; étiquette annotée
-  `vV` (auteur Claude) poussée, puis `/usr/bin/gh release create vV --repo tterraz/tinplate_reverb
+  `vV` (auteur Claude) poussée, puis `/usr/bin/gh release create vV --repo tterraz-vibe-audio/tinplate_reverb
   --title ... --notes-file notes-V.md <fichiers>` (`gh` hors du PATH, connecté au compte `tterraz`).
   **Une version publiée** : tout changement livré ensuite demande un nouveau numéro (`getVersion`,
   installateur, documents ; choix de l'utilisateur).
