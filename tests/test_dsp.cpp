@@ -44,11 +44,11 @@
  * 19. History outputs: input and reverb peaks, cut of the ducking, count of the clearings.
  * 13. Link: the parameter Mix sets dry and wet as the blend of CAPS; the levels are ignored,
  *     even automated; automation of Mix gives, after the ramp, the output of the new mix.
- * 20. Two plates: modulation off and plate 2 set as plate 1, Split 100 gives the output of Split 0
+ * 20. Two plates: modulation off and plate B set as plate A, Split 100 gives the output of Split 0
  *     to the bit, Split 50 that times cos 45 + sin 45 (rounding only); plates of different settings:
  *     the reverb at Split 50 has the mean energy of the two plates alone (constant power, within
  *     1 dB); Split moved while playing: no click; a plate stopped (send 0, tail died away), its
- *     settings changed, started again: the output of a fresh plugin (residue of plate 1 only);
+ *     settings changed, started again: the output of a fresh plugin (residue of plate A only);
  *     Clear with both plates: after the fade, the output of a fresh plugin.
  */
 #include "src/DistrhoPluginInternal.hpp"
@@ -954,7 +954,7 @@ int main()
     std::printf("20. two plates\n");
     {
         Settings s = originalSettings(0.8f, 0.6f, 0.4f, 1.0f);
-        s.values[kParamModDepth] = 0.0f;   // no modulation: the phase of plate 2 plays no part
+        s.values[kParamModDepth] = 0.0f;   // no modulation: the phase of plate B plays no part
         s.values[kParamBandwidth2] = 0.8f;
         s.values[kParamTail2] = 0.6f;
         s.values[kParamDamping2] = 0.4f;
@@ -965,7 +965,7 @@ int main()
         bool same = true;
         for (size_t i = 0; i < N; ++i)
             same = same && oL[i] == rL[i] && oR[i] == rR[i];
-        check(same, "same settings, no modulation: Split 100 (plate 2 only) == Split 0, to the bit");
+        check(same, "same settings, no modulation: Split 100 (plate B only) == Split 0, to the bit");
         s.values[kParamSplit] = 50.0f;
         process(s, sr, L, R, oL, oR);
         const double k = static_cast<float>(std::cos(0.25 * M_PI)) + static_cast<double>(static_cast<float>(std::sin(0.25 * M_PI)));
@@ -997,7 +997,7 @@ int main()
             e[j] = rms(oL, 0, oL.size()) * rms(oL, 0, oL.size()) + rms(oR, 0, oR.size()) * rms(oR, 0, oR.size());
         }
         const double gap = 10.0 * std::log10(e[2] / (0.5 * (e[0] + e[1])));
-        std::snprintf(buf, sizeof(buf), "Split 50: energy %.2f dB from the mean of the plates alone (plate 2 %+.1f dB from plate 1)",
+        std::snprintf(buf, sizeof(buf), "Split 50: energy %.2f dB from the mean of the plates alone (plate B %+.1f dB from plate A)",
                       gap, 10.0 * std::log10(e[1] / e[0]));
         check(std::fabs(gap) < 1.0, buf);
 
@@ -1020,9 +1020,9 @@ int main()
         std::snprintf(buf, sizeof(buf), "Split 0 -> 100 -> 0 while playing: largest step %.4f (steady %.4f)", moved, steady);
         check(moved < 1.5f * steady, buf);
 
-        // plate 2 stopped, its size changed, started again: as a fresh plugin
+        // plate B stopped, its size changed, started again: as a fresh plugin
         s = originalSettings(0.8f, 0.5f, 0.4f, 1.0f);
-        s.values[kParamModDepth] = 0.0f;   // plate 1 runs on: its modulation would not restart
+        s.values[kParamModDepth] = 0.0f;   // plate A runs on: its modulation would not restart
         s.values[kParamSplit] = 50.0f;
         const size_t T = static_cast<size_t>(6.0 * sr), n = T + static_cast<size_t>(1.0 * sr);
         std::vector<float> x(n, 0.0f);
@@ -1040,7 +1040,7 @@ int main()
         d = 0.0;
         for (size_t i = T; i < n; ++i)
             d = std::max(d, std::max<double>(std::fabs(oL[i] - rL[i - T]), std::fabs(oR[i] - rR[i - T])));
-        std::snprintf(buf, sizeof(buf), "plate 2 stopped, size changed, started again: gap to a fresh plugin %.1e of %.2f",
+        std::snprintf(buf, sizeof(buf), "plate B stopped, size changed, started again: gap to a fresh plugin %.1e of %.2f",
                       d, peakOf(rL));
         check(d < 1e-5 * peakOf(rL), buf);
 

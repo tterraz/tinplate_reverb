@@ -65,8 +65,8 @@ Différences voulues avec l'original :
 | Damping | passe-bas dans la boucle (original) ; affiché : sa fréquence à -3 dB |
 | Depth, Rate | (point B) profondeur 0-200 % et vitesse 0,1-5 Hz (logarithmique) de la modulation des deux passe-tout modulés ; 100 % et 1,2 Hz : l'original au bit près (1,2 Hz pris en double exact, le paramètre float n'étant pas 1,2) ; Depth multiplie la rampe du gel (200 ms) ; Rate : `Sine::retune` garde la phase (tirée des deux dernières valeurs) ; mémoire pour Depth 200 % ; table des RT60 mesurée à Depth 100 % ; test 15 |
 | Size | (après `v1.1.0`, point C d'`AMELIORATIONS.md` ; choix 1b, 2a, puis 50-200 %) taille de la plaque, 50-200 % : retards et passe-tout de la boucle, passe-tout modulés et 12 prises × Size, arrondis (diffuseurs d'entrée inchangés) ; gain de boucle non compensé (durée ≈ × Size) ; changement glissé en 100 ms, lectures interpolées pendant le glissement seulement (`PlateCore::Plate::setSize`) ; 100 % : identité au bit (le pointeur de lecture est calculé depuis celui d'écriture, mêmes valeurs) ; mémoire pour 200 % ; Clear : la plaque vide prend la taille aussitôt (`finishGlide`) ; test 14 |
-| Split | (après 1.2.0, point N) part de l'entrée envoyée à chaque plaque, 0-100 % (défaut 0 : plaque 1 seule, l'original au bit près) : plaque 1 × cos, plaque 2 × sin de Split × 90° (puissance constante : niveau à peu près constant si les deux queues sont décorrélées ; exactement 1 et 0 aux bouts) ; envoi en rampe de 20 ms ; l'entrée des plaques est prise après pré-retard, gel et entrée stéréo, leurs sorties sont sommées avant Low cut ; gros bouton de la section INPUT (à la place de Bandwidth), pastilles 1 et 2 aux bouts de l'arc ; test 20 |
-| Bandwidth 2, Tail 2, Damping 2, Size 2 | (point N) réglages propres de la plaque 2, mêmes lois que la plaque 1 (défauts : ceux de CAPS, Size 150 %) ; Depth, Rate, Freeze, Clear partagés (chaque plaque a sa paire de plaques pour Clear, basculées ensemble) ; LFO de la plaque 2 démarré 45° plus loin (`Plate::setPhase`) pour que deux plaques aux mêmes réglages diffèrent ; plaque dont l'envoi est 0 : calculée jusqu'à 50 ms sous -120 dBFS (`kStopLevel`), puis vidée et arrêtée ; elle repart vide, à ses réglages aussitôt (`PlateLine`, `TinplatePlugin.cpp`) |
+| Split | (après 1.2.0, point N) part de l'entrée envoyée à chaque plaque, 0-100 % (défaut 0 : plaque A seule, l'original au bit près) : plaque A × cos, plaque B × sin de Split × 90° (puissance constante : niveau à peu près constant si les deux queues sont décorrélées ; exactement 1 et 0 aux bouts) ; envoi en rampe de 20 ms ; l'entrée des plaques est prise après pré-retard, gel et entrée stéréo, leurs sorties sont sommées avant Low cut ; gros bouton de la section INPUT (à la place de Bandwidth), pastilles A et B aux bouts de l'arc ; plaques nommées A et B (pas 1 et 2 : confusion avec les numéros des sections, décision de l'utilisateur) ; test 20 |
+| Bandwidth B, Tail B, Damping B, Size B | (point N) réglages propres de la plaque B, mêmes lois que la plaque A (défauts : ceux de CAPS, Size 150 %) ; Depth, Rate, Freeze, Clear partagés (chaque plaque a sa paire de plaques pour Clear, basculées ensemble) ; LFO de la plaque B démarré 45° plus loin (`Plate::setPhase`) pour que deux plaques aux mêmes réglages diffèrent ; plaque dont l'envoi est 0 : calculée jusqu'à 50 ms sous -120 dBFS (`kStopLevel`), puis vidée et arrêtée ; elle repart vide, à ses réglages aussitôt (`PlateLine`, `TinplatePlugin.cpp`) |
 | Freeze | réverbération tenue sans fin : entrée de la plaque fermée, decay à 1, damping supprimé (20 ms), profondeur de modulation à 0 (200 ms) ; le signal sec passe toujours |
 | Dry, Reverb | (1.1.0, à la place de Blend) faders des niveaux du sec et de la réverbération seule, off (-60) à +6 dB ; loi de position par morceaux (off, -40, -24, -12, 0, +6 dB à 0, 0,15, 0,35, 0,55, 0,82, 1) |
 | Width | largeur stéréo de la réverbération (0 % mono, 200 % côté doublé) |
@@ -93,9 +93,9 @@ Duck 0 et baisse revenue sous 1e-3 dB : gain non appliqué, sortie au bit près 
 
 **Ordre des paramètres** (`TinplateParams.hpp`) : plaque (Bandwidth, Tail, Damping, Size, Depth,
 Rate), Wet, Dry, Link, Mix, Pre-delay, Low cut, High cut, Width, Output, ducking, Clear, Stereo
-input, Mono bass, Sync, Note, Split, Bandwidth 2, Tail 2, Damping 2, Size 2 (après 1.2.0), puis Freeze et Bypass, puis les sorties (vu-mètres, puis historique
+input, Mono bass, Sync, Note, Split, Bandwidth B, Tail B, Damping B, Size B (après 1.2.0), puis Freeze et Bypass, puis les sorties (vu-mètres, puis historique
 `hist_in`, `hist_wet`, `hist_cut`, `hist_clears`) ; les préréglages (d'usine, de l'utilisateur,
-jeux A/B) couvrent `kParamBandwidth` .. `kParamSize2` (fichiers de préréglages de 1.2.0 : Split et la plaque 2 manquants prennent leurs défauts). Freeze et Bypass ont changé d'index après 1.2.0. Les index ont changé depuis 1.1.0 (Size,
+jeux A/B) couvrent `kParamBandwidth` .. `kParamSize2` (fichiers de préréglages de 1.2.0 : Split et la plaque B manquants prennent leurs défauts). Freeze et Bypass ont changé d'index après 1.2.0. Les index ont changé depuis 1.1.0 (Size,
 Depth, Rate, Link, Mix, High cut insérés) : l'automation d'un projet 1.1.0 se rattache par les
 symboles là où l'hôte s'en sert (LV2, CLAP par identifiant : non vérifié). Aucune compatibilité avec
 1.0.0 (aucun projet 1.0.0, dit l'utilisateur) : ordre et symboles changés librement.
@@ -142,11 +142,11 @@ Préréglages de l'utilisateur : comme Brimstone (voir « Interface »).
 
 ## Interface
 900 × 918 (858 en 1.2.0, 730 en 1.1.0, 600 en 1.0.0), redimensionnable (proportions gardées), HiDPI. Trois sections numérotées dans l'ordre
-du signal, 440 de haut (380 en 1.2.0) : **1 INPUT** (Pre-delay ou NOTE selon le petit bouton SYNC, Split et le petit bouton
-STEREO de l'entrée stéréo), **2 PLATE** (après 1.2.0 : une ligne par plaque, pastille 1 ou 2 à
+du signal, 440 de haut (380 en 1.2.0) : **1 INPUT** (Pre-delay ou NOTE selon le petit bouton SYNC placé sous sa valeur, Split et le petit bouton
+STEREO de l'entrée stéréo sous la sienne), **2 PLATE** (après 1.2.0 : une ligne par plaque, pastille A (laiton) ou B (cuivre) à
 gauche, Bandwidth, Tail, Damping, Size, rayon 22, valeurs courtes : fréquences, RT60, % ; puis
-Depth, Rate partagés et RT60 à 500 Hz des deux plaques ; ligne d'une plaque sans entrée grisée ;
-Tail, Damping, Depth, Rate grisés pendant le gel), **3 OUTPUT** (grille 2 × 2 : Width, Mono bass ; Low cut, High cut ; faders DRY,
+Depth, Rate partagés et RT60 à 500 Hz des deux plaques dans leur couleur ; ligne d'une plaque sans entrée grisée ;
+Tail, Damping, Depth, Rate grisés pendant le gel), **3 OUTPUT** (grille 2 × 2 : Width, Mono bass ; Low cut, High cut ; dessous, **FREEZE** (voyant ; dans l'en-tête jusqu'à 1.2.0) ; faders DRY,
 REVERB, OUTPUT ; vu-mètres IN, REVERB, OUT de 164 × 15 avec une échelle dBFS dessous ; PLATE 330 de large, OUTPUT 290). Dessous, les bandes
 symétriques (cadres de 425, même rayon 22 et même espacement des boutons) **4 DUCKING** (Duck,
 Threshold, Attack, Release, grisés sauf Duck quand Duck = 0 ; vu-mètre CUT 0-30 dB) et **5 CLEAR**
@@ -157,10 +157,14 @@ droite, Floor, Trigger, Fade, Window grisés si éteint). Puis **6 HISTORY**
 lignes THRESHOLD (à gauche, si Duck > 0), FLOOR et TRIGGER (à droite, si Clear) ; un point toutes
 les 25 ms (`uiIdle`, crêtes des ~30 dernières ms données par le DSP, `RecentPeak` de Brimstone ;
 vidage = compteur `hist_clears` changé), 30 s gardées, 3/7/30 s affichées (non enregistré avec
-le projet). En-tête : préréglages, A | B, copie, thème SLATE | TIN, **FREEZE** (voyant),
+le projet). En-tête : préréglages, A | B, copie, thème SLATE | TIN, **RANDOM** (après 1.2.0, comme Brimstone et
+Noise Padifier : tirage uniforme sur la course du bouton, logarithmique compris, de Bandwidth, Tail,
+Damping, Size des deux plaques, Split, Depth, Rate, Pre-delay, Low cut, High cut, Width, Mono bass ;
+niveaux, Link et Mix, ducking, Clear, Sync et Note, Stereo, Freeze, Bypass gardés ; affiché comme le
+préréglage « Random » ; `randomize`, démonstration `-DTINPLATE_UI_DEMO_RANDOM=1`, zone 119),
 ACTIVE/BYPASSED (le menu OPTIONS essayé pendant la session 73 a été retiré : chaque réglage est
 dans la section de son étape du signal). En bas : **temps de
-réverbération en fonction de la fréquence** de chaque plaque qui reçoit de l'entrée (laiton ; plaque 2 en trait fin ; secondes, échelle de 2 à 32 s selon les courbes) et **tonalité de la
+réverbération en fonction de la fréquence** de chaque plaque qui reçoit de l'entrée (A en laiton, B en cuivre, même épaisseur ; secondes, échelle de 2 à 32 s selon les courbes) et **tonalité de la
 réverbération** (acier, tirets, dB : Bandwidth des deux plaques en puissances pondérées par les envois, Low cut, High cut).
 
 Repris de Brimstone tel quel (même comportement, voir `../brimstone_vst3/LISEZMOI.md`) :
@@ -225,11 +229,11 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
 - Après 1.2.0 (session 76, deux plaques, point N) : sortie texte de `test_dsp` identique à celle
   de 1.2.0 (hors le préréglage ajouté) ; test 20 (6 contrôles) : plaques aux mêmes réglages sans
   modulation, Split 100 = Split 0 au bit, Split 50 = Split 0 × 1,41421 (3e-7) ; énergie à Split
-  50 à 0,01 dB de la moyenne des deux plaques seules ; Split 0 → 100 → 0 sans clic ; plaque 2
+  50 à 0,01 dB de la moyenne des deux plaques seules ; Split 0 → 100 → 0 sans clic ; plaque B
   arrêtée (vérifié par une trace : 4,9 s après son envoi à 0), sa taille changée, repartie : sortie
   d'un greffon neuf (6e-8) ; Clear à Split 50 : sortie d'un greffon neuf après le fondu (0).
   `build.sh` complet sans avertissement ; validateur VST3 47/47 Linux et Windows (sous Wine) ;
-  interface vue en capture (deux thèmes ; bulles des boutons de la plaque 2 non vues : le
+  interface vue en capture (deux thèmes ; bulles des boutons de la plaque B non vues : le
   pointeur de l'écran les efface à l'ouverture). Banc (`two`, cœurs 2 et 4 échangés) : voir
   `AMELIORATIONS.md` N.
 - Validateur VST3 de Steinberg : 47/47 sur le VST3 Linux et sur le VST3 Windows (sous Wine) ;
@@ -292,7 +296,8 @@ Table des RT60 (à refaire si le cœur change) : commandes en tête de `tools/rt
 - Pistes non faites : réglages des préréglages à l'oreille ;
   autres pistes dans `AMELIORATIONS.md`.
 - **Après 1.2.0 (session 76, 2026-11-27, non publié)** : N deuxième plaque en parallèle (Split,
-  Bandwidth 2, Tail 2, Damping 2, Size 2, préréglage Two plates ; zones de démonstration : knobs
-  23 Split, 24-27 plaque 2), O cadres du haut plus hauts et vu-mètres agrandis (900 × 918).
-  Restent : écoute (Two plates, défauts de la plaque 2), vrai hôte, manuels (fr, en : section
+  Bandwidth B, Tail B, Damping B, Size B, préréglage Two plates ; zones de démonstration : knobs
+  23 Split, 24-27 plaque B), O cadres du haut plus hauts et vu-mètres agrandis (900 × 918).
+  Puis P (A/B, couleurs, FREEZE dans OUTPUT) et Q (RANDOM).
+  Restent : écoute (Two plates, défauts de la plaque B), tirage RANDOM au clic, vrai hôte, manuels (fr, en : section
   PLATE, Split, figures) et captures à refaire à la release, qui prendra un nouveau numéro.

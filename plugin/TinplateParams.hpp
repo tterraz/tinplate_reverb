@@ -44,12 +44,12 @@ enum TinplateParam {
     kParamMonoBass,       // option: the reverb is mono below this frequency, Hz (minimum = off)
     kParamSync,           // pre-delay locked to the tempo of the host (0/1)
     kParamNote,           // pre-delay when locked: note value, index into TinplateNote (0..12)
-    kParamSplit,          // share of the input sent to plate 2, % (0: plate 1 only, the original;
-                          // constant power: plate 1 gets cos, plate 2 sin of split x 90 degrees)
-    kParamBandwidth2,     // plate 2: bandwidth, same law as plate 1
-    kParamTail2,          // plate 2: tail
-    kParamDamping2,       // plate 2: damping
-    kParamSize2,          // plate 2: size, %
+    kParamSplit,          // share of the input sent to plate B, % (0: plate A only, the original;
+                          // constant power: plate A gets cos, plate B sin of split x 90 degrees)
+    kParamBandwidth2,     // plate B: bandwidth, same law as plate A
+    kParamTail2,          // plate B: tail
+    kParamDamping2,       // plate B: damping
+    kParamSize2,          // plate B: size, %
     kParamFreeze,         // infinite tail: input of the tank closed, no loss in the tank (0/1)
     kParamBypass,         // host bypass
     // outputs
@@ -99,11 +99,11 @@ static const TinplateRange kTinplateRanges[kParamCount] = {
     {  20.0f,  500.0f,  20.0f },    // mono bass, Hz (20 = off)
     {   0.0f,    1.0f,   0.0f },    // pre-delay sync
     {   0.0f,   12.0f,   6.0f },    // pre-delay note (1/16)
-    {   0.0f,  100.0f,   0.0f },    // split, % (0 = plate 1 only)
-    {   0.0f,    1.0f,   0.5f },    // plate 2: bandwidth
-    {   0.0f,   1.16f,   0.5f },    // plate 2: tail
-    {   0.0f,    1.0f,  0.75f },    // plate 2: damping
-    {  50.0f,  200.0f, 150.0f },    // plate 2: size, % (larger than plate 1 by default)
+    {   0.0f,  100.0f,   0.0f },    // split, % (0 = plate A only)
+    {   0.0f,    1.0f,   0.5f },    // plate B: bandwidth
+    {   0.0f,   1.16f,   0.5f },    // plate B: tail
+    {   0.0f,    1.0f,  0.75f },    // plate B: damping
+    {  50.0f,  200.0f, 150.0f },    // plate B: size, % (larger than plate A by default)
     {   0.0f,    1.0f,   0.0f },    // freeze
     {   0.0f,    1.0f,   0.0f },    // bypass
     { -60.0f,    6.0f, -60.0f },    // meter in
@@ -138,7 +138,7 @@ static const TinplatePreset kTinplatePresets[] = {
     //                      bandw  tail  damp   size   depth  rate  wet   dry   link  mix   pre   lowcut hicut  width  out
     //                      duck  thresh  att  rel  clear  floor  trigger  fade  window
     //                      stereo  monobass  sync  note
-    //                      split  bandw2  tail2  damp2  size2 (plate 2: plate 1 with a size x 1.5, split 0)
+    //                      split  bandwB  tailB  dampB  sizeB (plate B: plate A with a size x 1.5, split 0)
     { "Default",          { 0.80f, 0.55f, 0.40f, 100.0f, 100.0f, 1.2f, -16.0f, -1.5f, 0.0f, 0.30f, 12.0f, 60.0f, 20000.0f,
                             100.0f, 0.0f, 0.0f, -30.0f, 10.0f, 300.0f, 0.0f, -50.0f, -20.0f, 60.0f, 20.0f,
                             0.0f, 20.0f, 0.0f, 6.0f,

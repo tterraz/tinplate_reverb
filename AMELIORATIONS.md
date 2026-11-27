@@ -47,9 +47,9 @@ demandera un nouveau numéro de version. Détails de l'existant : `LISEZMOI.md`.
   l'essai dans un vrai logiciel audio sous Windows et Linux (par l'utilisateur).
 
 ## Après 1.2.0 (session 76, 2026-11-27, non publié)
-- **N. Deuxième plaque en parallèle** : **faite** (demande de l'utilisateur ; choix : plaque 2 à
+- **N. Deuxième plaque en parallèle** : **faite** (demande de l'utilisateur ; choix : plaque B à
   Bandwidth, Tail, Damping, Size propres, modulation, gel et Clear partagés ; bouton Split à
-  puissance constante, plaque 1 × cos, plaque 2 × sin de Split × 90°). Split 0 (défaut) : sortie
+  puissance constante, plaque A × cos, plaque B × sin de Split × 90°). Split 0 (défaut) : sortie
   au bit près celle d'avant (tests inchangés, identité avec CAPS) ; plaque sans entrée calculée
   jusqu'à ce que sa queue reste 50 ms sous -120 dBFS, puis vidée et arrêtée. Préréglage « Two
   plates ». Test 20 ; banc : cas « two » (Split 50 %) 145 ns par trame contre 79 pour « music »
@@ -59,3 +59,14 @@ demandera un nouveau numéro de version. Détails de l'existant : `LISEZMOI.md`.
 - **O. Cadres 1 à 3 plus hauts, vu-mètres agrandis** : **fait** (demande de l'utilisateur) :
   fenêtre 900 × 918 (sections du haut 440 de haut au lieu de 380), vu-mètres 164 × 15 (au lieu
   de 132 × 9) avec une échelle dBFS dessous.
+- **P. Retouches de l'interface** : **faites** (demande de l'utilisateur) : plaques nommées A et B
+  (1 et 2 se confondaient avec les numéros des sections ; noms et symboles des paramètres
+  `bandwidth_b`, `tail_b`, `damping_b`, `size_b`) ; une couleur par plaque (A laiton, B cuivre :
+  pastilles, RT60, courbes de même épaisseur, à la place d'un trait fin pour B) ; FREEZE sous Low
+  cut et High cut dans OUTPUT, sa place de l'en-tête gardée pour un bouton RANDOM (à venir, comme
+  Brimstone et Noise Padifier) ; SYNC et STEREO sous la valeur de leur bouton.
+- **Q. Bouton RANDOM** : **fait** (en-tête, à la place de FREEZE ; règle de Noise Padifier, accord
+  de l'utilisateur) : tirage uniforme sur la course du bouton de Bandwidth, Tail, Damping, Size des
+  deux plaques, Split, Depth, Rate, Pre-delay, Low cut, High cut, Width, Mono bass ; niveaux, Link,
+  ducking, Clear, Sync, Stereo input, Freeze et Bypass gardés. Tirage vu en démonstration ; pas
+  essayé au clic.

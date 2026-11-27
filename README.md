@@ -20,9 +20,11 @@ measured decay-time display, level history, presets and A/B comparison.
   (50 to 200 %) scales the plate (longer delays: deeper, denser, longer); **Depth** and **Rate**
   set the modulation of the tank (100 % and 1.2 Hz: the original).
 - **Two plates in parallel** (after 1.2.0): a second plate with its own **Bandwidth**, **Tail**,
-  **Damping** and **Size**; the **Split** knob sends the input to plate 1, plate 2 or both at
-  constant power (0 %: plate 1 only, the original). A plate without input stops computing once
+  **Damping** and **Size**; the **Split** knob sends the input to plate A, plate B or both at
+  constant power (0 %: plate A only, the original). A plate without input stops computing once
   its tail has died away.
+- **RANDOM** (after 1.2.0): draws the sound (both plates, split, modulation, pre-delay, filters,
+  width, mono bass) at random over the travel of each knob; levels, ducking and clear are kept.
 - Smooth automation: every coefficient glides in 20 ms (the original jumps at the next block).
 - **Pre-delay** (0-250 ms, crossfaded changes), or **synced** to the host tempo (new in 1.2.0:
   1/64 to 1/4, dotted and triplet), **Low cut** and **High cut** on the reverb (12 dB/octave),

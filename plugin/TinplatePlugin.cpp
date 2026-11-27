@@ -75,16 +75,16 @@
  * last ~30 ms, and the count of the clearings.
  *
  * Two plates in parallel (after 1.2.0): the input of the tank (after the pre-delay, the freeze
- * gain and the stereo input) feeds plate 1 times cos(a) and plate 2 times sin(a), a = Split x 90
+ * gain and the stereo input) feeds plate A times cos(a) and plate B times sin(a), a = Split x 90
  * degrees (constant power: the level of the reverb stays about the same over the knob when the
- * two tails are uncorrelated); their outputs are summed before the low cut.  Plate 2 has its own
+ * two tails are uncorrelated); their outputs are summed before the low cut.  Plate B has its own
  * Bandwidth, Tail, Damping and Size; the modulation (depth, rate), the freeze and the clearing are
  * shared (each plate has its own pair of plates for Clear, switched together).  Its modulation
  * starts 45 degrees later, so that two plates with the same settings still differ a little.  A
  * plate whose send is 0 is computed until its tail has stayed under -120 dBFS for 50 ms, then
  * emptied and no longer computed; it starts again empty, at its settings at once, its send
- * ramped up in 20 ms.  Split 0 (the default): plate 1 only, gain exactly 1, the output to the bit
- * that of a single plate; Split 100: plate 2 only.
+ * ramped up in 20 ms.  Split 0 (the default): plate A only, gain exactly 1, the output to the bit
+ * that of a single plate; Split 100: plate B only.
  */
 
 #include "DistrhoPlugin.hpp"
@@ -368,11 +368,11 @@ protected:
             break;
         case kParamWidth:     set(p, "Width", "width", "%"); break;
         case kParamOutput:    set(p, "Output", "output", "dB"); break;
-        case kParamSplit:     set(p, "Plate split", "split", "%"); break;
-        case kParamBandwidth2: set(p, "Bandwidth 2", "bandwidth2", ""); break;
-        case kParamTail2:     set(p, "Tail 2", "tail2", ""); break;
-        case kParamDamping2:  set(p, "Damping 2", "damping2", ""); break;
-        case kParamSize2:     set(p, "Size 2", "size2", "%"); break;
+        case kParamSplit:     set(p, "Plate split (A to B)", "split", "%"); break;
+        case kParamBandwidth2: set(p, "Bandwidth B", "bandwidth_b", ""); break;
+        case kParamTail2:     set(p, "Tail B", "tail_b", ""); break;
+        case kParamDamping2:  set(p, "Damping B", "damping_b", ""); break;
+        case kParamSize2:     set(p, "Size B", "size_b", "%"); break;
         case kParamFreeze:
             set(p, "Freeze", "freeze", "");
             p.hints |= kParameterIsBoolean | kParameterIsInteger;
@@ -699,7 +699,7 @@ private:
             for (PlateCore::Plate& p : fLines[k].plate)
             {
                 p.init(static_cast<float>(sr));
-                p.setPhase(k == 0 ? 0.0 : 0.25 * M_PI);   // plate 2: modulation 45 degrees later
+                p.setPhase(k == 0 ? 0.0 : 0.25 * M_PI);   // plate B: modulation 45 degrees later
             }
         const unsigned n = PlateCore::nextPowerOf2(static_cast<unsigned>(0.001 * kPredelayMaxMs * sr) + 2);
         fPre[0].assign(n, 0.0f);
@@ -957,7 +957,7 @@ private:
     float fParams[kParamCount];
     String fStates[kStateCount];   // strings of the interface, only kept for the host
 
-    PlateLine fLines[2];           // plates 1 and 2 in parallel; clear: plate[fCur] of each is current
+    PlateLine fLines[2];           // plates A and B in parallel; clear: plate[fCur] of each is current
     float fNormal = 1e-20f;        // NOISE_FLOOR of CAPS
     bool fRamp = false;
     Ramp<float> fInGain, fModulation, fWet, fDry, fWidth, fStereo, fGain, fBypass;
